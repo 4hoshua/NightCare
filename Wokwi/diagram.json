@@ -1,0 +1,104 @@
+{
+  "version": 1,
+  "author": "Yan Alec",
+  "editor": "wokwi",
+  "parts": [
+    {
+      "type": "board-esp32-devkit-c-v4",
+      "id": "esp",
+      "top": 0,
+      "left": 0,
+      "attrs": {}
+    },
+    {
+      "type": "wokwi-pir-motion-sensor",
+      "id": "pir",
+      "top": -130,
+      "left": 210,
+      "attrs": {
+        "delayTime": "5",
+        "inhibitTime": "1.2"
+      }
+    },
+    {
+      "type": "wokwi-pushbutton",
+      "id": "helpButton",
+      "top": 150,
+      "left": -160,
+      "attrs": {
+        "color": "red",
+        "label": "AJUDA"
+      }
+    },
+    {
+      "type": "wokwi-led",
+      "id": "guideLed",
+      "top": 30,
+      "left": 250,
+      "attrs": {
+        "color": "white",
+        "label": "ORIENTACAO"
+      }
+    },
+    {
+      "type": "wokwi-resistor",
+      "id": "guideResistor",
+      "top": 100,
+      "left": 220,
+      "attrs": {
+        "value": "220"
+      }
+    },
+    {
+      "type": "wokwi-led",
+      "id": "statusLed",
+      "top": 150,
+      "left": 350,
+      "attrs": {
+        "color": "red",
+        "label": "AJUDA"
+      }
+    },
+    {
+      "type": "wokwi-resistor",
+      "id": "statusResistor",
+      "top": 220,
+      "left": 320,
+      "attrs": {
+        "value": "220"
+      }
+    },
+    {
+      "type": "wokwi-buzzer",
+      "id": "buzzer",
+      "top": 300,
+      "left": 210,
+      "attrs": {
+        "volume": "0.1"
+      }
+    }
+  ],
+  "connections": [
+    [ "esp:TX", "$serialMonitor:RX", "", [] ],
+    [ "esp:RX", "$serialMonitor:TX", "", [] ],
+
+    [ "esp:5V", "pir:VCC", "red", [] ],
+    [ "esp:GND.1", "pir:GND", "black", [] ],
+    [ "esp:27", "pir:OUT", "green", [] ],
+
+    [ "esp:14", "helpButton:1.l", "blue", [] ],
+    [ "helpButton:2.l", "esp:GND.1", "black", [] ],
+
+    [ "esp:25", "guideResistor:1", "orange", [] ],
+    [ "guideResistor:2", "guideLed:A", "orange", [] ],
+    [ "guideLed:C", "esp:GND.1", "black", [] ],
+
+    [ "esp:26", "statusResistor:1", "purple", [] ],
+    [ "statusResistor:2", "statusLed:A", "purple", [] ],
+    [ "statusLed:C", "esp:GND.1", "black", [] ],
+
+    [ "esp:32", "buzzer:2", "green", [] ],
+    [ "buzzer:1", "esp:GND.1", "black", [] ]
+  ],
+  "dependencies": {}
+}
