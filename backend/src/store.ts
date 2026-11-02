@@ -4,7 +4,7 @@ export type Publisher = (topic: string, payload: string, retained: boolean) => P
 export class Store {
   db: Database.Database;
   publish?: Publisher;
-  constructor(path: string, readonly now = () => Date.now()) {
+  constructor(path: string, readonly now = () => Date.now(), readonly prefix = PREFIX) {
     this.db = new Database(path);
     this.db.pragma('journal_mode = WAL'); this.db.pragma('foreign_keys = ON'); this.db.pragma('busy_timeout = 5000');
     this.db.exec(`
@@ -15,6 +15,13 @@ export class Store {
       CREATE TABLE IF NOT EXISTS assistance_requests (request_id TEXT PRIMARY KEY, status TEXT NOT NULL, press_count INTEGER NOT NULL DEFAULT 1, updated_at INTEGER NOT NULL);
       CREATE TABLE IF NOT EXISTS commands (command_id TEXT PRIMARY KEY, request_id TEXT NOT NULL, action TEXT NOT NULL, payload TEXT NOT NULL, status TEXT NOT NULL DEFAULT 'PENDING', reason TEXT, created_at INTEGER NOT NULL, expires_at INTEGER NOT NULL);
     `);
+    const columns = this.db.prepare('PRAGMA table_info(assistance_requests)').all() as {name:string}[];
+    if (!columns.some(c=>c.name==='opened_at')) {
+      this.db.transaction(()=>{
+      this.db.exec('ALTER TABLE assistance_requests ADD COLUMN opened_at INTEGER');
+      this.db.exec(`UPDATE assistance_requests SET opened_at=COALESCE((SELECT MIN(received_at) FROM events WHERE events.request_id=assistance_requests.request_id),updated_at)`);
+      })();
+    }
     this.db.prepare('INSERT OR IGNORE INTO devices(device_id) VALUES (?)').run(DEVICE);
   }
   markDisconnected() { this.db.prepare("UPDATE devices SET availability='offline'").run(); }
@@ -24,8 +31,8 @@ export class Store {
       lastSeen: row.last_seen, online: row.availability === 'online' && row.state_seen !== null && this.now() - row.state_seen < 45000 };
   }
   ingest(topic: string, raw: Buffer, retained = false) {
-    if (raw.length > 8192 || !topic.startsWith(PREFIX)) throw new Error('invalid topic/payload size');
-    const input = JSON.parse(raw.toString()); const suffix = topic.slice(PREFIX.length); const now = this.now();
+    if (raw.length > 8192 || !topic.startsWith(this.prefix)) throw new Error('invalid topic/payload size');
+    const input = JSON.parse(raw.toString()); const suffix = topic.slice(this.prefix.length); const now = this.now();
     this.db.transaction(() => {
       if (suffix === 'events') {
         if (retained) throw new Error('retained event');
@@ -35,11 +42,11 @@ export class Store {
         if (result.changes && e.requestId) {
           // Event replay contributes history; current device state is authoritative for active requests.
           const status = e.type === 'HELP_CLOSED' ? 'CLOSED' : e.type === 'HELP_ACKNOWLEDGED' ? 'ACKNOWLEDGED' : 'PENDING';
-          this.db.prepare(`INSERT INTO assistance_requests VALUES (?,?,?,?) ON CONFLICT(request_id) DO UPDATE SET
+          this.db.prepare(`INSERT INTO assistance_requests(request_id,status,press_count,updated_at,opened_at) VALUES (?,?,?,?,?) ON CONFLICT(request_id) DO UPDATE SET
             status=CASE WHEN assistance_requests.status='CLOSED' THEN 'CLOSED' WHEN excluded.status='CLOSED' THEN 'CLOSED'
             WHEN assistance_requests.status='ACKNOWLEDGED' THEN 'ACKNOWLEDGED' ELSE excluded.status END,
             press_count=MAX(assistance_requests.press_count,excluded.press_count), updated_at=excluded.updated_at`)
-            .run(e.requestId,status,e.pressCount ?? 1,now);
+            .run(e.requestId,status,e.pressCount ?? 1,now,now);
         }
       } else if (suffix === 'state') {
         const s = stateSchema.parse(input); const old = this.device().state;
@@ -47,8 +54,8 @@ export class Store {
         // Retained state is a snapshot, never proof that the device is online now.
         this.db.prepare('UPDATE devices SET state=?,state_seen=?,last_seen=?,availability=? WHERE device_id=?')
           .run(JSON.stringify(s),retained ? null : now,now,retained ? 'offline' : 'online',DEVICE);
-        if (s.requestId) this.db.prepare(`INSERT INTO assistance_requests VALUES (?,?,?,?) ON CONFLICT(request_id) DO UPDATE SET status=excluded.status,press_count=excluded.press_count,updated_at=excluded.updated_at`)
-          .run(s.requestId,s.assistanceStatus,s.pressCount,now);
+        if (s.requestId) this.db.prepare(`INSERT INTO assistance_requests(request_id,status,press_count,updated_at,opened_at) VALUES (?,?,?,?,?) ON CONFLICT(request_id) DO UPDATE SET status=excluded.status,press_count=excluded.press_count,updated_at=excluded.updated_at`)
+          .run(s.requestId,s.assistanceStatus,s.pressCount,now,now);
         this.db.prepare("UPDATE device_configs SET status='APPLIED',reason='STATE_CONFIRMED' WHERE config_version=?").run(s.appliedConfigVersion);
       } else if (suffix === 'availability') {
         const a = availabilitySchema.parse(input);
@@ -98,7 +105,7 @@ export class Store {
   }
   getCommand(id: string) { const r=this.db.prepare('SELECT * FROM commands WHERE command_id=?').get(id); return r ? this.commandView(r) : null; }
   tick() { this.db.prepare("UPDATE commands SET status='UNCONFIRMED',reason='ACK_TIMEOUT' WHERE status='PENDING' AND created_at<=?").run(this.now()-10000); }
-  async tryPublish(suffix: string,payload: string,retain: boolean) { try { await this.publish?.(PREFIX+suffix,payload,retain); } catch { /* persisted intent is replayed on reconnect */ } }
+  async tryPublish(suffix: string,payload: string,retain: boolean) { try { await this.publish?.(this.prefix+suffix,payload,retain); } catch { /* persisted intent is replayed on reconnect */ } }
   async replay() {
     const cfg = this.db.prepare('SELECT payload FROM device_configs ORDER BY config_version DESC LIMIT 1').get() as any;
     if (cfg) await this.tryPublish('config/set',cfg.payload,true);
@@ -110,6 +117,6 @@ export class Store {
       .all(query.type ?? null,query.type ?? null,query.from ? Date.parse(query.from) : null,query.from ? Date.parse(query.from) : null,query.to ? Date.parse(query.to) : null,query.to ? Date.parse(query.to) : null,query.limit ?? 100)
       .map((x:any)=>({...x,payload:JSON.parse(x.payload)}));
   }
-  snapshot() { return {device:this.device(),configs:this.configs(),requests:this.db.prepare('SELECT * FROM assistance_requests ORDER BY updated_at DESC LIMIT 100').all(),commands:(this.db.prepare('SELECT * FROM commands ORDER BY created_at DESC LIMIT 30').all() as any[]).map(x=>this.commandView(x))}; }
+  snapshot() { return {eventCount:(this.db.prepare('SELECT COUNT(*) AS n FROM events').get() as {n:number}).n,device:this.device(),configs:this.configs(),requests:this.db.prepare('SELECT * FROM assistance_requests ORDER BY updated_at DESC LIMIT 100').all(),commands:(this.db.prepare('SELECT * FROM commands ORDER BY created_at DESC LIMIT 30').all() as any[]).map(x=>this.commandView(x))}; }
   close() { this.db.close(); }
 }

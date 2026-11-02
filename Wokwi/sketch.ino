@@ -12,10 +12,30 @@
 #include <esp_idf_version.h>
 #include <freertos/FreeRTOS.h>
 #include <freertos/queue.h>
-#if __has_include("mqtt_secrets.h")
-#include "mqtt_secrets.h"
+// No navegador, a aba mqtt_demo.h seleciona automaticamente a demonstracao.
+// PlatformIO pode escolher explicitamente NIGHTCARE_DEMO=0 (TLS) ou =1 (demo).
+#ifndef NIGHTCARE_DEMO
+#if __has_include("mqtt_demo.h")
+#define NIGHTCARE_DEMO 1
 #else
+#define NIGHTCARE_DEMO 0
+#endif
+#endif
+
+#if NIGHTCARE_DEMO
+#if __has_include("mqtt_demo.h")
+#include "mqtt_demo.h"
+#elif __has_include("mqtt_demo.example.h")
+#include "mqtt_demo.example.h"
+#else
+#error "Demo: crie a aba mqtt_demo.h copiando Wokwi/demo/mqtt_demo.h gerado por scripts/demo.sh."
+#endif
+#elif __has_include("mqtt_secrets.h")
+#include "mqtt_secrets.h"
+#elif __has_include("mqtt_secrets.example.h")
 #include "mqtt_secrets.example.h"
+#else
+#error "Crie a aba mqtt_demo.h para a demo gratuita, ou forneca mqtt_secrets.h para TLS."
 #endif
 
 void recordEvent(const char* type, const char* request = nullptr);
@@ -25,6 +45,7 @@ uint32_t appliedConfigVersion = 0;
 String commandJournal = "[]";
 String bootId;
 uint32_t eventCounter = 0;
+bool networkPausedForTest = false;
 
 // ---------- Hardware ----------
 
@@ -155,7 +176,7 @@ struct TimeService {
       );
     }
 
-    if (!connected && now - lastWifiAttemptMs >= 30000UL) {
+    if (!connected && !networkPausedForTest && now - lastWifiAttemptMs >= 30000UL) {
       lastWifiAttemptMs = now;
       WiFi.reconnect();
     }
@@ -798,6 +819,9 @@ void printHelp() {
   Serial.println("encerrar            -> finalizar pedido reconhecido");
   Serial.println("status / ajuda");
   Serial.println("reiniciar           -> reinicio do ESP32");
+#if defined(NIGHTCARE_DEMO) && NIGHTCARE_DEMO
+  Serial.println("rede off / rede on  -> interromper/restaurar WiFi para teste local");
+#endif
 }
 
 bool parseNumber(
@@ -852,6 +876,22 @@ bool parseHHMM(const char* text, uint16_t& result) {
 }
 
 void handleCommand(const char* command) {
+#if defined(NIGHTCARE_DEMO) && NIGHTCARE_DEMO
+  if (strcmp(command, "rede off") == 0) {
+    networkPausedForTest = true;
+    WiFi.setAutoReconnect(false);
+    WiFi.disconnect(false, false);
+    Serial.println("[TESTE] WiFi pausado. Controle local continua; use rede on para reconectar.");
+    return;
+  }
+  if (strcmp(command, "rede on") == 0) {
+    networkPausedForTest = false;
+    WiFi.setAutoReconnect(true);
+    WiFi.begin("Wokwi-GUEST", "", 6);
+    Serial.println("[TESTE] Reconectando WiFi sem reiniciar o dispositivo.");
+    return;
+  }
+#endif
   if (strcmp(command, "reconhecer") == 0) {
     assistance.acknowledge();
     assistance.printStatus();
@@ -1008,7 +1048,7 @@ void updateSerial() {
 
 // ---------- MQTT TLS: network I/O runs in the ESP-MQTT task ----------
 // MQTT callbacks never mutate local controllers or Preferences.
-struct InboundMessage { char topic[96]; char payload[1537]; bool retained; };
+struct InboundMessage { char topic[160]; char payload[1537]; bool retained; };
 struct PendingEvent { String payload; bool assistance; int packetId = -1; unsigned long sentAt = 0; };
 PendingEvent eventQueue[100];
 size_t eventCount = 0;
@@ -1028,7 +1068,22 @@ unsigned long lastHeartbeatMs = 0;
 bool lastMotion = false;
 bool lastLight = false;
 String lastState;
-const char* MQTT_PREFIX = "nightcare/nightcare-001/";
+#ifndef MQTT_TOPIC_PREFIX
+#define MQTT_TOPIC_PREFIX "nightcare/nightcare-001/"
+#endif
+#ifndef MQTT_CLIENT_ID
+#define MQTT_CLIENT_ID "nightcare-001"
+#endif
+#ifndef MQTT_USE_TLS
+#define MQTT_USE_TLS 1
+#endif
+#ifndef MQTT_PORT
+#define MQTT_PORT 8883
+#endif
+const char* MQTT_PREFIX = MQTT_TOPIC_PREFIX;
+const String configTopic = String(MQTT_PREFIX) + "config/set";
+const String commandsTopic = String(MQTT_PREFIX) + "commands";
+const String availabilityTopic = String(MQTT_PREFIX) + "availability";
 
 String utcNow() {
   if (clockService.testMode != -1 || time(nullptr) < 1704067200) return "";
@@ -1070,8 +1125,8 @@ void mqttCallback(void*, esp_event_base_t, int32_t eventId, void* data) {
   auto* event = static_cast<esp_mqtt_event_handle_t>(data);
   if (eventId == MQTT_EVENT_CONNECTED) {
     mqttOnline = true; mqttJustConnected = true; mqttNeedsRetry = false;
-    esp_mqtt_client_subscribe(event->client,"nightcare/nightcare-001/config/set",1);
-    esp_mqtt_client_subscribe(event->client,"nightcare/nightcare-001/commands",1);
+    esp_mqtt_client_subscribe(event->client,configTopic.c_str(),1);
+    esp_mqtt_client_subscribe(event->client,commandsTopic.c_str(),1);
   } else if (eventId == MQTT_EVENT_DISCONNECTED) {
     mqttOnline = false; mqttNeedsRetry = true;
   } else if (eventId == MQTT_EVENT_PUBLISHED) {
@@ -1099,21 +1154,21 @@ void beginConnectivity() {
   deliveryQueue = xQueueCreate(32,sizeof(int));
   if (!inboundQueue || !deliveryQueue) { Serial.println("[MQTT] Sem memoria; controle local continua."); return; }
   if (strstr(MQTT_HOST,".example") || strstr(MQTT_PASSWORD,"SUBSTITUA")) { Serial.println("[MQTT] Preencha mqtt_secrets.h para habilitar a rede."); return; }
-  static String uri = String("mqtts://") + MQTT_HOST + ":8883";
+  static String uri = String(MQTT_USE_TLS ? "mqtts://" : "mqtt://") + MQTT_HOST + ":" + String(MQTT_PORT);
   static const char will[] = "{\"schemaVersion\":1,\"deviceId\":\"nightcare-001\",\"status\":\"offline\"}";
   esp_mqtt_client_config_t cfg = {};
 #if ESP_IDF_VERSION_MAJOR >= 5
-  cfg.broker.address.uri = uri.c_str(); cfg.broker.verification.certificate = MQTT_CA;
-  cfg.credentials.username = MQTT_USER; cfg.credentials.authentication.password = MQTT_PASSWORD;
-  cfg.credentials.client_id = "nightcare-001";
-  cfg.session.last_will.topic = "nightcare/nightcare-001/availability";
+  cfg.broker.address.uri = uri.c_str(); cfg.broker.verification.certificate = MQTT_USE_TLS ? MQTT_CA : nullptr;
+  cfg.credentials.username = strlen(MQTT_USER) ? MQTT_USER : nullptr; cfg.credentials.authentication.password = strlen(MQTT_PASSWORD) ? MQTT_PASSWORD : nullptr;
+  cfg.credentials.client_id = MQTT_CLIENT_ID;
+  cfg.session.last_will.topic = availabilityTopic.c_str();
   cfg.session.last_will.msg = will; cfg.session.last_will.qos = 1; cfg.session.last_will.retain = true;
   cfg.session.keepalive = 15; cfg.network.disable_auto_reconnect = true; cfg.network.timeout_ms = 5000;
   cfg.buffer.size = 2048;
 #else
-  cfg.uri = uri.c_str(); cfg.cert_pem = MQTT_CA;
-  cfg.username = MQTT_USER; cfg.password = MQTT_PASSWORD; cfg.client_id = "nightcare-001";
-  cfg.lwt_topic = "nightcare/nightcare-001/availability"; cfg.lwt_msg = will; cfg.lwt_qos = 1; cfg.lwt_retain = true;
+  cfg.uri = uri.c_str(); cfg.cert_pem = MQTT_USE_TLS ? MQTT_CA : nullptr;
+  cfg.username = strlen(MQTT_USER) ? MQTT_USER : nullptr; cfg.password = strlen(MQTT_PASSWORD) ? MQTT_PASSWORD : nullptr; cfg.client_id = MQTT_CLIENT_ID;
+  cfg.lwt_topic = availabilityTopic.c_str(); cfg.lwt_msg = will; cfg.lwt_qos = 1; cfg.lwt_retain = true;
   cfg.keepalive = 15; cfg.disable_auto_reconnect = true; cfg.network_timeout_ms = 5000; cfg.buffer_size = 2048;
 #endif
   mqttClient = esp_mqtt_client_init(&cfg);
@@ -1209,7 +1264,7 @@ void updateConnectivity(unsigned long now) {
   const bool light = lighting.appliedPwm > 0;
   if (light != lastLight) { lastLight = light; recordEvent(light ? "LIGHT_ON" : "LIGHT_OFF"); }
   if (!mqttClient) return;
-  const bool ready = WiFi.status() == WL_CONNECTED && time(nullptr) >= 1704067200;
+  const bool ready = WiFi.status() == WL_CONNECTED && (!MQTT_USE_TLS || time(nullptr) >= 1704067200);
   if (!mqttStarted && ready) { mqttStarted = esp_mqtt_client_start(mqttClient) == ESP_OK; }
   if (mqttNeedsRetry && retryStartedMs == 0) retryStartedMs = now;
   if (mqttNeedsRetry && ready && now-retryStartedMs >= retryDelayMs) {
@@ -1218,15 +1273,15 @@ void updateConnectivity(unsigned long now) {
   if (mqttJustConnected) {
     mqttJustConnected = false; retryDelayMs = 1000; retryStartedMs = 0; lastState = "";
     enqueueMqtt("availability","{\"schemaVersion\":1,\"deviceId\":\"nightcare-001\",\"status\":\"online\"}",true);
-    Serial.println("[MQTT] Conectado com TLS e QoS 1.");
+    Serial.printf("[MQTT] Conectado com %s e QoS 1.\n", MQTT_USE_TLS ? "TLS" : "TCP demo publico");
   }
   InboundMessage incoming;
   // At most one command/configuration per iteration, leaving time for local inputs.
   if (xQueueReceive(inboundQueue,&incoming,0) == pdTRUE) {
     JsonDocument doc;
     if (!deserializeJson(doc,incoming.payload)) {
-      if (strcmp(incoming.topic,"nightcare/nightcare-001/config/set") == 0) applyRemoteConfig(doc);
-      else if (strcmp(incoming.topic,"nightcare/nightcare-001/commands") == 0) applyRemoteCommand(doc,incoming.retained);
+      if (strcmp(incoming.topic,configTopic.c_str()) == 0) applyRemoteConfig(doc);
+      else if (strcmp(incoming.topic,commandsTopic.c_str()) == 0) applyRemoteCommand(doc,incoming.retained);
     }
   }
   int packetId;

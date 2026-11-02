@@ -14,3 +14,9 @@ Wokwi/mqtt_secrets.h
 .nightcare-write-check
 
 .validation/
+
+Wokwi/mqtt_demo.h
+Wokwi/demo/
+Wokwi/wokwi.demo.toml
+
+.playwright-mcp/

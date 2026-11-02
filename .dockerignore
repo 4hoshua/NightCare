@@ -11,3 +11,7 @@ data
 .validation/
 .env.*
 **/*.sqlite*
+Wokwi/mqtt_demo.h
+Wokwi/demo
+
+.playwright-mcp/

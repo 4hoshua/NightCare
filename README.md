@@ -1,95 +1,117 @@
 # NightCare
 
-Assistente acadêmico de deslocamento noturno: ESP32 com PIR, iluminação PWM e botão de assistência. O controle de luz e os sinais de assistência continuam funcionando sem internet. O aviso remoto depende da conexão. Sistema de apoio, sem certificação médica ou prevenção garantida de quedas.
+MVP acadêmico de Microprocessadores e Microcontroladores para apoiar deslocamentos noturnos: ESP32, sensor de movimento, luz com brilho ajustável e botão de ajuda. O cuidador acompanha o ambiente e atende chamados pelo dashboard.
 
-Implementados: firmware autônomo, MQTT com TLS/QoS 1, backend Node.js/TypeScript/Fastify, histórico SQLite, API autenticada e implantação Docker com Mosquitto. Dashboard e WebSocket estão fora deste escopo.
+**O caminho principal é gratuito:** Wokwi no navegador, broker MQTT público sem cadastro e backend/dashboard no seu computador. Não exige gateway privado, VPS, domínio, cartão ou abertura de portas no roteador. Use somente dados fictícios: o broker da demonstração é público, sem autenticação ou privacidade. O projeto é um sistema de apoio, sem certificação médica ou garantia de prevenção de quedas.
 
-## Arquivos
+## Começar em poucos passos
 
-```text
-Wokwi/sketch.ino                  firmware e comandos seriais
-Wokwi/diagram.json                circuito existente
-Wokwi/libraries.txt               ArduinoJson com versão exata
-Wokwi/mqtt_secrets.example.h      modelo sem credenciais
-Wokwi/mqtt_secrets.h              gerado localmente, ignorado
-Wokwi/wokwi.toml                  execução do binário PlatformIO no Wokwi VS Code
-platformio.ini                   ESP32/Arduino e dependências fixadas
-backend/src/                     contratos, SQLite, API e cliente MQTT
-backend/test/                    testes de contrato/API
-backend/package-lock.json        dependências exatas, usar npm ci
-backend/Dockerfile               estágios de compilação, testes e execução
-compose.yml                      backend e broker, volumes e healthchecks
-mosquitto/mosquitto.conf          listener TLS 8883 e persistência
-mosquitto/acl                     permissões por usuário/tópico
-scripts/setup.sh                 CA, certificado SAN e credenciais
-scripts/test-backend.sh           testes com Node 22 em Docker
-scripts/test-integration.sh       TLS/ACL/MQTT/API e persistência em Docker
-secrets/                         material local gerado, ignorado
-.env                             parâmetros locais gerados, ignorado
-```
+Requisitos: Docker com Compose v2, Python 3, Bash, internet e navegador. No Windows, execute os comandos em um ambiente Bash com Docker integrado. Docker Desktop precisa compartilhar a pasta do projeto. Não é necessário instalar Node para executar pelo Docker.
 
-## Preparar o host público
-
-É necessário um servidor com Docker Engine/Compose v2, Bash, Python 3 e OpenSSL. Para compilar firmware, instale PlatformIO Core 6.1.18 ou a extensão PlatformIO do VS Code. O backend exige **Node >=22.13**, com Node **22.21.1** fixado no Dockerfile. Node 20 não é suportado pelas dependências atuais, incluindo `better-sqlite3@12.4.1` e dependências transitivas. Use Docker se o computador ainda usa Node 20.
-
-1. Escolha um DNS público apontando para seu servidor, por exemplo `mqtt.seudominio.com`. O endereço é fornecido por você; o projeto não cria DNS, VPS nem encaminhamento de portas. IPv4 público também é aceito.
-2. Libere **TCP 8883** no firewall do host e do provedor. Em rede doméstica, configure NAT/encaminhamento para o computador que executa o broker; CGNAT normalmente exige um servidor público ou outra solução de acesso. Não abra a porta 1883: ela não existe nesta configuração.
-3. Copie este repositório para esse host. Execute na raiz, substituindo o domínio de exemplo pelo endereço real:
+Na raiz do projeto:
 
 ```bash
-bash scripts/setup.sh mqtt.seudominio.com
-docker compose up --build -d
-docker compose ps
-docker compose logs --tail=100 mosquitto backend
+bash scripts/demo.sh
 ```
 
-O Compose sobe **ambos os serviços**. O backend usa `mqtts://mosquitto:8883` pela rede interna; o ESP32 usa o domínio público. O certificado tem SAN para os dois nomes. O healthcheck do broker publica por TLS com um usuário restrito a `health/nightcare`; o backend só inicia após esse teste passar. O healthcheck do backend verifica SQLite e conexão MQTT. A API fica em `127.0.0.1:3000` do servidor.
+O script prepara uma configuração exclusiva e inicia o backend com o dashboard. Abra **http://localhost:3000**. O painel abre sem login; o dispositivo ficará offline até iniciar a simulação.
 
-O script gera uma CA privada (10 anos), certificado de servidor (365 dias), usuários separados `nightcare-001`, `nightcare-backend`, `nightcare-health`, senhas aleatórias e token de API. DNS gera SAN `DNS:HOST,DNS:mosquitto`; IPv4 gera `IP:HOST,DNS:mosquitto`. Não usa `setInsecure`, `rejectUnauthorized:false` nem certificado autoassinado aceito sem CA. A CA privada só fica em `secrets/ca/ca.key` e não é montada nos serviços. O broker recebe apenas certificados, chave do servidor, hashes de senha e senha exclusiva do healthcheck. A pasta `secrets/` permanece acessível apenas ao dono no host; seus arquivos de execução são legíveis pelo usuário do contêiner dentro do bind mount.
-
-O script recusa sobrescrever `.env`, `secrets/` ou `mqtt_secrets.h`. Em falha parcial de preparação, examine os arquivos antes de tentar de novo; não apague uma CA de uma instalação em uso. Para renovação, mantenha a CA e gere um novo CSR/certificado com o mesmo SAN, substitua apenas certificado e chave do servidor e reinicie Mosquitto. Se trocar a CA, atualize também o certificado no firmware e reinicie ambos os serviços. Guarde backup seguro da CA; não envie a chave privada ao Wokwi.
-
-Para acessar a API de seu computador quando tudo roda em um servidor:
+Se a porta 3000 já estiver em uso:
 
 ```bash
-ssh -N -L 3000:127.0.0.1:3000 usuario@servidor
+DEMO_HTTP_PORT=3001 bash scripts/demo.sh
 ```
 
-O token não deve transitar em HTTP aberto na internet. Para exposição direta da API, use um proxy HTTPS com autenticação Bearer. A implantação padrão usa apenas loopback/túnel SSH.
-
-## Conectar o ESP32 no Wokwi
-
-Abra o [projeto original](https://wokwi.com/projects/479504505300117505) ou crie uma cópia privada. Substitua os arquivos pelo conteúdo atual de `Wokwi/sketch.ino`, `Wokwi/diagram.json` e `Wokwi/libraries.txt`. Crie também uma aba `mqtt_secrets.h` com o conteúdo gerado por `scripts/setup.sh`. O arquivo contém **somente a credencial do dispositivo e o certificado público da CA**, nunca a chave da CA ou token da API.
-
-Não publique um projeto Wokwi contendo credenciais reais: o código é visível para quem acessa o projeto. Use uma cópia privada e senhas exclusivas da demonstração; revogue a credencial se compartilhá-la.
-
-A rede Wi-Fi é `Wokwi-GUEST`, sem senha. A sincronização UTC vem de `pool.ntp.org`. O cliente só inicia TLS depois de obter data UTC plausível, para verificar validade do certificado. Falha de NTP impede MQTT/TLS, mas não o PIR, botão ou iluminação local. Antes de horário válido, o modo automático aceita movimento o dia todo. Relógio de teste congelado serve à agenda, nunca autoriza comandos remotos.
-
-O ESP32 e o backend conectam ao **mesmo broker público**. O dispositivo não acessa a API nem `localhost` do seu computador. O gateway público do Wokwi fornece acesso de saída à internet; não fornece acesso direto à sua rede privada. Se preferir o gateway privado, configure o Wokwi separadamente e ajuste DNS/certificado coerentemente. O caminho documentado aqui usa o host público.
-
-Alternativamente, compile na raiz e use a extensão Wokwi do VS Code com `Wokwi/wokwi.toml`:
+Nesse caso, abra http://localhost:3001 e use a mesma variável em futuras execuções. Para preparar apenas os arquivos do Wokwi, sem iniciar Docker:
 
 ```bash
-pio run
+bash scripts/demo.sh --prepare-only
 ```
 
-O binário e o ELF são gerados em `.pio/build/esp32dev/`. A configuração fixa `espressif32@6.12.0` (Arduino ESP32 2.0.17) e `ArduinoJson@7.4.2`. O código também contém o formato de configuração MQTT do ESP-IDF 5, mas essa variante exige validação própria; a compilação reproduzível é a do PlatformIO. Sem `mqtt_secrets.h`, o exemplo permite compilar e o firmware informa no serial que MQTT está desabilitado.
+O script gera `.env.demo`, `Wokwi/mqtt_demo.h` e um pacote em `Wokwi/demo/`. Ele reutiliza o identificador nas execuções seguintes, não altera `.env`, `secrets/` ou `mqtt_secrets.h` da modalidade TLS e recusa substituir um `mqtt_demo.h` que pertença a outra configuração. Não copie `.env.demo` entre demonstrações independentes: cada instalação precisa de seu próprio prefixo.
 
-### Circuito e controle local
+### Iniciar a simulação gratuita
+
+1. Abra o [circuito original no Wokwi](https://wokwi.com/projects/479504505300117505) e crie sua cópia.
+2. Substitua `sketch.ino`, `diagram.json` e `libraries.txt` pelos arquivos de **`Wokwi/demo/`** gerados pelo script.
+3. No editor do Wokwi, crie um arquivo/aba com o nome exato **`mqtt_demo.h`** e cole todo o conteúdo de `Wokwi/demo/mqtt_demo.h`. Salve antes de iniciar a simulação. Os quatro arquivos necessários são `sketch.ino`, `diagram.json`, `libraries.txt` e `mqtt_demo.h`; **não é necessário adicionar `mqtt_secrets.h`, `mqtt_secrets.example.h` ou `mqtt_demo.example.h`**. Não copie `wokwi.toml` para o navegador.
+4. Inicie a simulação. Use o gateway público padrão; não habilite o gateway privado.
+5. No monitor serial, acompanhe Wi-Fi e a mensagem MQTT conectado. No painel, aguarde o dispositivo ficar online.
+6. Clique no PIR e em **Simulate Motion**. Pressione o botão AJUDA para abrir um chamado.
+
+A rede simulada é `Wokwi-GUEST`, sem senha, e o NTP usa `pool.ntp.org`. Aguarde a sincronização antes de reconhecer/encerrar pelo painel. Para testar iluminação durante o dia, envie pelo painel agenda **00:00–00:00**, ou use o modo **Ligado**. Horários iguais significam funcionamento automático 24 h.
+
+O ESP32 conecta a `broker.emqx.io:1883` pela internet; o backend conecta ao mesmo broker. **Não use `localhost`, `mosquitto` ou `host.wokwi.internal` como endereço MQTT no Wokwi deste roteiro.** O gateway público não acessa sua rede local. [Rede e gateway público do Wokwi](https://docs.wokwi.com/guides/esp32-wifi)
+
+### Credenciais e parâmetros da demo
+
+| Parâmetro | Valor / origem |
+| --- | --- |
+| Broker | `broker.emqx.io`, TCP `1883` |
+| Usuário e senha MQTT | vazios; serviço público sem autenticação |
+| Login/token do painel e API | dispensados com `DEMO_MODE=true` |
+| Wi-Fi | `Wokwi-GUEST`, senha vazia |
+| Prefixo MQTT | `nightcare/demo/<identificador>/nightcare-001/` |
+| Identificador da instalação | 16 caracteres hexadecimais gerados em `.env.demo` |
+| Client IDs | `nightcare-<identificador>-backend` e `nightcare-<identificador>-device` |
+| API/dashboard | `http://localhost:3000`, apenas loopback |
+
+Não há segredos a solicitar ou configurar no modo demo. O prefixo exclusivo evita colisões acidentais, mas qualquer pessoa pode ler ou publicar mensagens se conhecer o tópico. Nunca envie dados pessoais ou credenciais por esse broker. O EMQX disponibiliza o serviço para protótipos e testes, sem necessidade de preparar infraestrutura. [Endereço e portas do broker público](https://www.emqx.com/en/mqtt/public-mqtt5-broker)
+
+## Arquitetura
+
+```mermaid
+flowchart LR
+  PIR[PIR e botão] --> ESP[ESP32 no Wokwi gratuito]
+  ESP --> OUT[Luz PWM, LED de ajuda e buzzer]
+  ESP <-->|MQTT público / QoS 1| BROKER[Broker público EMQX]
+  BROKER <-->|MQTT| API[Backend Node / Fastify]
+  API <--> DB[(SQLite)]
+  UI[Dashboard React no navegador] <-->|HTTP e WebSocket locais| API
+```
+
+O ESP32 controla iluminação, agenda, debounce e sinalização de ajuda. A rede roda em tarefa própria e entrega mensagens ao loop por fila FreeRTOS. Falha de internet não interrompe PIR, botão ou saídas locais.
+
+O broker encaminha eventos, estado, configurações e comandos. O backend valida as mensagens, registra histórico em SQLite e confirma ações somente após resposta do dispositivo. O dashboard acessa o backend; não conecta diretamente ao ESP32 nem ao broker.
+
+O frontend React/TypeScript é compilado com Vite e servido pelo próprio Fastify. HTTP e WebSocket usam o mesmo endereço, sem outro servidor de frontend. O backend envia snapshots iniciais e alterações por `/ws`; o painel reconecta automaticamente e recupera o histórico. O banco usa WAL e preserva configurações desejadas, pedidos e comandos antes de publicá-los.
+
+| Parte | Arquivos principais |
+| --- | --- |
+| Firmware e circuito | `Wokwi/sketch.ino`, `Wokwi/diagram.json` |
+| Dashboard | `frontend/src/` |
+| API, MQTT e SQLite | `backend/src/` |
+| Execução gratuita | `compose.demo.yml`, `scripts/demo.sh` |
+| Alternativa com broker próprio/TLS | `compose.yml`, `mosquitto/`, `scripts/setup.sh` |
+| Testes | `backend/test/`, `scripts/test-*.sh` |
+
+### Estados e confirmações
+
+Iluminação, assistência e comunicação são independentes. Desconectar MQTT não encerra um chamado nem muda o modo de luz.
+
+O painel apresenta conexão WebSocket, broker e dispositivo separadamente. Estado retido é uma fotografia: o backend espera mensagem nova para indicar presença e considera offline após **45 s** sem atualização, ou ao receber `offline`. O ESP32 envia heartbeat a cada **15 s**.
+
+Ao enviar configuração, o painel mostra a versão desejada e a versão aplicada pelo ESP32. Um HTTP **202** indica intenção registrada; a confirmação vem de `acks` ou de `state.appliedConfigVersion`. Mudanças locais por serial não incrementam a versão remota: confira também os valores atuais nos cartões.
+
+O botão abre um pedido `PENDING`. **Reconhecer** muda para `ACKNOWLEDGED`; **Encerrar** só é permitido depois e retorna a `NONE`. Chamados não expiram com a luz. Novos cliques reiteram o mesmo pedido. O painel mantém o aviso, mostra o tempo desde a primeira observação da abertura e oferece som ativado pelo usuário; exige aba aberta e conectada. Para registros anteriores à migração, a abertura usa o primeiro recebimento disponível, ou a última atualização quando não há histórico.
+
+Comandos exibem enviado, confirmado, recusado ou **não confirmado** após dez segundos sem ACK. São válidos por 60 s. O painel bloqueia ações incompatíveis e aguarda a confirmação; o backend e o firmware também validam pedido, relógio e transição. Um ACK MQTT de transporte não confirma atendimento.
+
+## Circuito e controle local
 
 | Componente | Ligação |
 | --- | --- |
-| PIR OUT | GPIO 27; alimentação 5 V e GND |
+| PIR OUT | GPIO 27, alimentação 5 V e GND |
 | Botão AJUDA | GPIO 14 e GND, `INPUT_PULLUP` |
-| LED branco | GPIO 25, resistor 220 Ω e GND |
-| LED vermelho | GPIO 26, resistor 220 Ω e GND |
-| Buzzer | positivo GPIO 32, negativo GND |
+| LED branco, representando luminária | GPIO 25, resistor 220 Ω e GND |
+| LED vermelho de assistência | GPIO 26, resistor 220 Ω e GND |
+| Buzzer | GPIO 32 e GND |
 
-Clique no PIR e em **Simulate Motion**; a saída permanece ativa por cerca de cinco segundos. O brilho padrão é 30%, a temporização após PIR inativo é 30 s e a agenda é 22:00–06:00. Início é inclusivo, fim exclusivo e início igual ao fim significa 24 h. `ON` e `OFF` ignoram agenda. Ao sair da agenda, `AUTO` apaga imediatamente. Novo movimento cancela o desligamento pendente.
+Padrões: `AUTO`, brilho **30%**, prazo **30 s**, agenda **22:00–06:00**, São Paulo/UTC−3 fixo. O início da agenda é inclusivo e o fim exclusivo. `ON` mantém luz no brilho configurado; `OFF` mantém apagada. Em `AUTO`, sair da agenda apaga imediatamente. PIR ativo mantém luz ligada; o prazo começa quando fica inativo e novo movimento cancela o desligamento.
 
-O botão tem debounce de 50 ms e gera um evento por pressionamento. Abre apenas um pedido e novos cliques reiteram seu `requestId`, inclusive depois do reconhecimento. Pendente: LED alterna a cada 500 ms e buzzer toca 100 ms a cada 5 s. Reconhecida: LED aceso, buzzer silencioso. Encerramento exige reconhecimento; timeout da luz e soltar o botão não encerram o chamado.
+Sem relógio válido, `AUTO` aceita movimento o dia todo e informa `clockValid=false`. O botão funciona a qualquer hora, inclusive com luz desligada. Debounce: 50 ms. Pedido pendente: LED alterna a cada 500 ms e buzzer toca 100 ms a cada 5 s. Reconhecido: LED aceso e buzzer silencioso.
 
-Comandos no monitor serial (115200 baud):
+Monitor serial, 115200 baud:
 
 ```text
 auto
@@ -107,152 +129,147 @@ encerrar
 status
 ajuda
 reiniciar
+rede off
+rede on
 ```
 
-`brilho`: 1–100%; `tempo`: 1–600 s; `fuso`: inteiro −12 a +14. O horário fixo e o relógio inválido não são salvos. Configuração e assistência usam NVS/Preferences (`nightcare`, chaves `config` e `help`). O formato anterior é migrado sem descartar os parâmetros; registro de assistência inválido abre um pedido de recuperação. `reiniciar` é o primeiro teste de persistência; parar/reabrir a simulação tem comportamento de armazenamento próprio e deve ser testado separadamente.
+Brilho aceita 1–100%, prazo 1–600 s, e `fuso` aceita inteiro −12..+14. A configuração remota usa `America/Sao_Paulo`, mapeado para UTC−3 sem regras de horário de verão. `hora HH:MM` congela o relógio para testar agenda; `hora invalida` simula falha. Ambos impedem comandos remotos: use `hora real` e aguarde NTP antes de atender pelo painel. Reconhecimento/encerramento seriais são controles locais de teste.
 
-Configurações remotas aceitam `timezone: America/Sao_Paulo` e aplicam UTC−3 fixo; não há base IANA nem regras históricas/futuras de horário de verão no ESP32. O comando serial `fuso` mantém a compatibilidade de teste. Uma configuração remota mais nova restaura UTC−3. Alterações locais não incrementam `appliedConfigVersion`: esse número identifica apenas a última configuração remota aplicada. Confira também os campos atuais de `state` ao comparar a configuração.
+Configuração e chamado ativo são gravados em NVS. Teste primeiro com `reiniciar`; parar e reabrir o Wokwi é outro cenário, pois a persistência depende do simulador. A fila de eventos e o contador de perdas estão em RAM e desaparecem no reboot.
 
-## Contrato MQTT
+## Roteiro de validação pelo usuário
 
-Prefixo: `nightcare/nightcare-001/`. Todas as mensagens JSON têm `schemaVersion: 1` e `deviceId: nightcare-001`. O backend valida estrutura, tipos, faixas e tópicos; mensagens inválidas são rejeitadas e registradas sem interromper o serviço. IDs têm até 64 caracteres alfanuméricos, `_` ou `-`.
+Mantenha monitor serial e dashboard abertos. Anote ação, resultado esperado e observado. Ao terminar testes de horário, use `hora real`. Se uma configuração desejada retida for reaplicada após reinício, ela pode substituir alterações seriais de teste.
+
+| Cenário / ação | Resultado esperado |
+| --- | --- |
+| Painel: `AUTO`, brilho 55%, agenda 00:00–00:00, prazo 5 s | versão desejada avança e aplicada é confirmada; movimento acende no brilho escolhido |
+| Serial: `agenda 22:00 06:00`, `auto`, `hora 21:59`, movimento | luz apagada |
+| `hora 22:00`, movimento | luz acesa |
+| `hora 05:59`, depois `hora 06:00` | movimento permitido antes do fim; luz apaga no fim |
+| PIR inativo, novo movimento antes do prazo | desligamento cancelado; contar novamente após PIR inativo |
+| `off`, pressionar AJUDA e manter pressionado | um clique abre um chamado mesmo fora da agenda; manter pressionado não gera novos cliques |
+| Soltar e pressionar AJUDA novamente | mesmo requestId e reiteração no histórico |
+| `hora real`, aguardar NTP; painel: Reconhecer | confirmação, estado reconhecido, LED contínuo e buzzer silencioso |
+| Recarregar o painel antes de encerrar | chamado continua visível, com horário de abertura preservado |
+| Painel: Encerrar | confirmação, estado sem chamado e evento distinto no histórico |
+| Ativar aviso sonoro e abrir outro chamado | aviso sonoro com painel aberto; reconhecer silencia |
+| Filtrar histórico por tipo e período | apenas eventos correspondentes; período usa horário de recebimento no backend |
+| `hora invalida`, movimento | controle local aceita movimento em AUTO; painel mostra relógio inválido e bloqueia comandos |
+| Enviar brilho 0 pela API | HTTP 400; nenhuma configuração parcial aplicada |
+| Reenviar comando com mesmo ID/corpo | mesma intenção, sem segunda transição |
+| Usar requestId antigo para pedido novo | HTTP 409 ou ACK de recusa, sem encerrar o pedido novo |
+| Com pedido reconhecido, `reiniciar` | mesmo pedido e estado recuperados da NVS |
+
+### Falha de rede e recuperação
+
+**Parar o backend** testa sua indisponibilidade; o ESP32 pode continuar conectado ao broker. Execute em outro terminal:
+
+```bash
+docker compose --env-file .env.demo -p nightcare-demo -f compose.demo.yml stop backend
+# Teste PIR e botão no Wokwi e observe a perda de atualização do painel.
+bash scripts/demo.sh
+```
+
+Depois de voltar, o painel reconecta; SQLite mantém os registros anteriores e o estado atual chega novamente. Eventos publicados enquanto o backend estava parado podem não entrar no histórico: a confirmação QoS 1 do broker permite ao ESP32 removê-los da fila, e a assinatura do backend usa sessão limpa. O chamado ativo continua recuperável pelo estado retido e pela NVS.
+
+**Interromper a rede do ESP32** testa a fila e o controle local offline. Na demo, envie `rede off` no monitor serial: o firmware desliga a conexão Wi-Fi e suspende sua reconexão automática, mantendo o loop local executando. Teste PIR e botão e aguarde até 45 s para verificar offline no painel. Envie `rede on` para reconectar sem reiniciar nem apagar a fila. Esses comandos só existem na compilação demo e não são persistidos. Não é necessário desconectar a internet do computador nem parar o broker público compartilhado.
+
+Com a simulação ainda executando, confirme PIR e botão responsivos, offline no painel por Last Will ou timeout, e retorno do estado ao reconectar. Gere mais de 100 eventos durante a interrupção — por exemplo, alternando `on`/`off` e pressionando AJUDA — e confira `droppedEvents`. A fila descarta primeiro o evento comum mais antigo; se todos forem de assistência, descarta o mais antigo. Ao reconectar, eventos pendentes são reenviados e deduplicados por `eventId`. Teste de fila no firmware exige execução efetiva, não é comprovado pelo cliente MQTT dos testes automatizados.
+
+### Testes automatizados e compilação
+
+```bash
+bash scripts/test-backend.sh
+bash scripts/test-demo.sh
+bash scripts/test-integration.sh
+bash -n scripts/demo.sh scripts/setup.sh scripts/test-backend.sh scripts/test-demo.sh scripts/test-integration.sh
+```
+
+Os testes usam Node 22 em Docker. `test-demo.sh` cria broker anônimo **isolado, sem publicar portas**, backend e SQLite temporários; verifica dashboard servido, WebSocket, configuração confirmada, ajuda/reconhecimento/encerramento, deduplicação, relógio inválido e recuperação de presença. `test-integration.sh` valida a alternativa TLS, autenticação, ACL, Last Will e persistência após reinício. Ambos usam clientes MQTT que representam o dispositivo; não executam o firmware. Os scripts removem seus próprios contêineres/volumes e preservam diagnóstico em `.validation/`.
+
+Para compilar localmente, instale PlatformIO Core **6.1.18**:
+
+```bash
+bash scripts/demo.sh --prepare-only
+pio run -e esp32demo
+# Alternativa TLS:
+pio run -e esp32dev
+```
+
+O ambiente fixa `espressif32@6.12.0`, Arduino ESP32 2.0.17 e ArduinoJson 7.4.2. O pacote gerado inclui `wokwi.toml` com o binário demo para uso opcional da extensão VS Code; o caminho principal é o navegador gratuito. A variante ESP-IDF 5 do código não está validada.
+
+Os resultados efetivamente obtidos estão em [docs/VALIDACAO.md](docs/VALIDACAO.md). Compilação e cliente MQTT não substituem testes do circuito no Wokwi.
+
+## API e tópicos MQTT
+
+Na demo, exemplos funcionam sem token:
+
+```bash
+curl -fsS http://localhost:3000/api/status
+curl -fsS 'http://localhost:3000/api/events?limit=20&type=HELP_OPENED'
+curl -fsS -X POST http://localhost:3000/api/config \
+  -H 'Content-Type: application/json' \
+  -d '{"mode":"AUTO","brightnessPct":55,"offDelaySec":5,"startTime":"00:00","endTime":"00:00","timezone":"America/Sao_Paulo"}'
+```
+
+| Rota | Uso |
+| --- | --- |
+| `GET /health/live` | processo HTTP ativo |
+| `GET /health/ready` | SQLite e conexão MQTT; 503 sem broker |
+| `GET /ui-config` | informa se o modo demo está ativo |
+| `GET /api/status` | dispositivo, configurações, chamados, comandos e contador de eventos |
+| `GET /api/events?limit=100&type=...&from=...&to=...` | histórico; datas ISO UTC, limite 1–500 |
+| `POST /api/config` | configuração completa; backend atribui versão crescente |
+| `POST /api/commands` | `commandId`, `requestId`, `action: ACK_HELP ou CLOSE_HELP` |
+| `GET /api/commands/:id` | resultado da intenção |
+| `GET /ws` com upgrade WebSocket | `{type:"snapshot",data:...}` inicial e ao mudar dados |
+
+Para comandos manuais, copie o requestId ativo de `/api/status`. Use um ID novo por intenção e repita o mesmo corpo/ID apenas para repetir a mesma intenção:
+
+```bash
+curl -fsS -X POST http://localhost:3000/api/commands \
+  -H 'Content-Type: application/json' \
+  -d '{"commandId":"demo-ack-001","requestId":"ID_ATIVO","action":"ACK_HELP"}'
+curl -fsS http://localhost:3000/api/commands/demo-ack-001
+```
+
+Aguarde `APPLIED` e `ACKNOWLEDGED` no estado; depois envie `CLOSE_HELP` com outro commandId. HTTP 400 indica entrada inválida; 409 indica conflito, offline, relógio inválido ou transição incompatível. Na modalidade TLS, `/api/` exige `Authorization: Bearer TOKEN`, e `/ws` exige mensagem inicial `{type:"auth",token:"..."}`; o painel oferece campo para esse token, mantido apenas em memória.
+
+Todos os tópicos abaixo usam o prefixo da instalação. Payloads preservam `schemaVersion:1` e `deviceId:"nightcare-001"`.
 
 | Sufixo | Direção | QoS | Retido |
 | --- | --- | --- | --- |
 | `events` | ESP32 → backend | 1 | não |
 | `state` | ESP32 → backend | 1 | sim |
-| `availability` | ESP32 → backend | 1 | sim, Last Will `offline` |
+| `availability` | ESP32 → backend | 1 | sim, Last Will offline |
 | `config/set` | backend → ESP32 | 1 | sim |
 | `commands` | backend → ESP32 | 1 | não |
 | `acks` | ESP32 → backend | 1 | não |
 
-A ACL permite ao dispositivo escrever apenas seus quatro tópicos de saída e ler apenas configuração/comandos. O backend tem permissões inversas. O usuário de healthcheck não acessa os tópicos do dispositivo. Não há acesso anônimo ou wildcard entre dispositivos.
+Eventos têm eventId exclusivo por dispositivo/boot/contador, tipo, uptime, requestId quando aplicável e horário UTC ou `null`. SQLite deduplica pelo eventId. O estado inclui sequência, modo, luz, brilho, movimento, assistência, relógio, versão aplicada, perdas e persistência. Configurações inválidas ou antigas são rejeitadas integralmente; repetição igual não regrava NVS. Comandos repetidos não repetem transições; pedido e resultado são gravados atomicamente na NVS com diário dos últimos 16 comandos.
 
-Eventos: `eventId`, `bootId`, `type`, `occurredAt` (UTC ou `null`), `uptimeMs`, `requestId` (ou `null`) e `pressCount`. Tipos: `BOOT`, `MOTION_STARTED`, `MOTION_ENDED`, `LIGHT_ON`, `LIGHT_OFF`, `HELP_OPENED`, `HELP_REITERATED`, `HELP_ACKNOWLEDGED`, `HELP_CLOSED`, `HELP_RECOVERED`, `CONFIG_APPLIED`. IDs combinam dispositivo, boot aleatório de 64 bits e contador. O ID do evento `HELP_OPENED` é o próprio `requestId` salvo até encerrar.
-
-`state`: `bootId`, `sequence`, `uptimeMs`, `mode`, `lightOn`, `brightnessPct`, `motion`, `assistanceStatus` (`NONE`, `PENDING`, `ACKNOWLEDGED`), `requestId`, `pressCount`, `clockValid`, `appliedConfigVersion`, `droppedEvents`, `persistenceOk`. Publicado ao mudar, ao reconectar e a cada 15 s. Estado retido é uma fotografia, não prova de presença: o backend exige heartbeat novo e marca offline após 45 s ou disponibilidade `offline`. Sequências repetidas do mesmo boot não renovam a presença.
-
-Configuração desejada: `configVersion` crescente, `mode`, `brightnessPct`, `offDelaySec`, `startTime`, `endTime`, `timezone`. O backend aloca a versão dentro de transação SQLite. O ESP32 valida tudo antes de aplicar/gravar. Versões antigas são rejeitadas; versão igual e conteúdo igual retorna `ALREADY_APPLIED` sem nova escrita em NVS; versão igual com conteúdo diferente é rejeitada. `acks` e `state.appliedConfigVersion` comprovam aplicação. `202 Accepted` da API só confirma registro da intenção.
-
-Comando: `commandId`, `requestId`, `action` (`ACK_HELP` ou `CLOSE_HELP`), `issuedAt`, `expiresAt`, validade de 60 s. O ESP32 exige UTC real válido, pedido ativo correspondente e transição válida. Comando retido é rejeitado. A repetição de um comando aceito não repete a transição: o resultado e o estado resultante são gravados atomicamente no mesmo registro NVS, com diário dos últimos 16 comandos. Após a expulsão do diário, as regras de pedido/transição e validade continuam impedindo repetir os efeitos de comandos antigos. Reutilizar um ID com outro conteúdo é conflito no diário/backend.
-
-ACK: `commandId` e `requestId`, ou `configVersion`; `status: APPLIED|REJECTED`; `reason`. O backend só atualiza comandos por ACK correlacionado. Sem ACK em dez segundos, a API apresenta `UNCONFIRMED` (resultado não confirmado), mesmo que a publicação MQTT tenha recebido PUBACK. Um ACK tardio ainda pode confirmar. O histórico de eventos e o estado do dispositivo são evidências distintas do envio de comando.
-
-A rede usa a tarefa do ESP-MQTT; o loop local recebe no máximo uma mensagem de configuração/comando por iteração através de uma fila FreeRTOS. Envio usa `esp_mqtt_client_enqueue`, com QoS 1 e um evento em trânsito. Há backoff de 1, 2, 4, 8, 16, até 30 s. A fila de eventos em RAM tem limite de 100 e só remove por PUBACK ou descarte: lotada, descarta o evento comum mais antigo; se todos forem de assistência, descarta o mais antigo. Cada descarte incrementa `droppedEvents`. Reconexão publica estado e escoa a fila; o banco deduplica por `eventId`. Fila e contador de perdas não sobrevivem a reboot; chamado ativo e configurações sobrevivem se NVS estiver operacional.
-
-## API HTTP
-
-Leia `API_TOKEN` no arquivo `.env` gerado e defina no terminal, sem incluí-lo em arquivos versionados:
+## Operação, desenvolvimento e alternativa TLS
 
 ```bash
-read -rsp 'API token: ' API_TOKEN
-export API_TOKEN
-curl -fsS http://127.0.0.1:3000/health/live
-curl -fsS http://127.0.0.1:3000/health/ready
-curl -fsS -H "Authorization: Bearer $API_TOKEN" http://127.0.0.1:3000/api/status
+# Diagnóstico da demo
+docker compose --env-file .env.demo -p nightcare-demo -f compose.demo.yml ps
+docker compose --env-file .env.demo -p nightcare-demo -f compose.demo.yml logs --tail=100 backend
+# Parar preservando SQLite
+docker compose --env-file .env.demo -p nightcare-demo -f compose.demo.yml down
 ```
 
-| Método e caminho | Uso |
-| --- | --- |
-| `GET /health/live` | processo HTTP ativo |
-| `GET /health/ready` | SQLite disponível e broker conectado; 503 sem MQTT |
-| `GET /api/status` | dispositivo, presença, configurações desejadas, chamados e comandos |
-| `GET /api/events?limit=100&type=HELP_OPENED&from=...&to=...` | histórico, intervalo UTC pelo horário de recebimento; limite 1–500 |
-| `POST /api/config` | configuração completa sem versão; retorna intenção registrada (202) |
-| `POST /api/commands` | `commandId`, `requestId`, `action`; retorna comando registrado (202) |
-| `GET /api/commands/:id` | confirmação/recusa/resultado não confirmado |
+`down` preserva o volume do banco. `down -v` apaga o histórico e deve ser usado apenas para descarte intencional. A disponibilidade da demo depende do broker público. Se não conectar, confira internet, saída TCP 1883, host e igualdade do prefixo nos arquivos copiados ao Wokwi. Broker conectado com dispositivo offline indica que falta estado novo do ESP32; aguarde heartbeat. NTP inválido bloqueia comandos remotos, mas não a conexão MQTT sem TLS.
 
-As rotas `/api/` exigem `Authorization: Bearer TOKEN`; healthchecks não. `400` indica payload inválido, `401` autenticação ausente/incorreta, `404` registro ausente, `409` conflito, dispositivo offline, relógio inválido ou transição inválida. Corpos JSON têm limite de 8 KiB.
+Para desenvolvimento sem Docker, use **Node >=22.13**; a imagem fixa **22.21.1**. SQLite nativo pode exigir Python/make/g++. Execute `npm ci --prefix backend`, `npm ci --prefix frontend`, os builds de ambos e inicie o backend com `DEMO_MODE=true`, `MQTT_URL`, `MQTT_PREFIX`, `MQTT_CLIENT_ID` da `.env.demo` e `STATIC_ROOT` apontando para o caminho absoluto de `frontend/dist`. `HOST` padrão é `127.0.0.1`, porta 3000, e `DB_PATH` padrão é `./data/nightcare.sqlite`. Execute `npm start --prefix backend`. Há somente uma instância do backend por instalação e banco.
 
-Enviar configuração:
+A modalidade anterior com Mosquitto próprio/TLS permanece **opcional**, separada da demo. Em uma configuração nova com um host acessível pela internet:
 
 ```bash
-curl -fsS -X POST http://127.0.0.1:3000/api/config \
-  -H "Authorization: Bearer $API_TOKEN" -H 'Content-Type: application/json' \
-  -d '{"mode":"AUTO","brightnessPct":30,"offDelaySec":30,"startTime":"22:00","endTime":"06:00","timezone":"America/Sao_Paulo"}'
+bash scripts/setup.sh HOST_PUBLICO
+docker compose up --build -d
 ```
 
-Depois de apertar AJUDA, copie o `requestId` de `/api/status`. Substitua `ID_ATIVO` abaixo e use um ID novo por intenção. Para repetir a mesma intenção, reenvie o mesmo `commandId` e o mesmo corpo.
+Ela exige DNS/IPv4 acessível e TCP 8883; gera CA, certificado SAN para host e `mosquitto`, usuários separados e token aleatório. O script recusa sobrescrever `.env`, `secrets/` ou `mqtt_secrets.h`. Para o firmware TLS, use `Wokwi/sketch.ino`, circuito, bibliotecas e `mqtt_secrets.h`, com `#define NIGHTCARE_DEMO 0` na primeira linha para selecionar TLS explicitamente; esse caminho não usa o pacote `Wokwi/demo/`. TLS valida CA, hostname e data; não usa aceitação indiscriminada de certificados. A API permanece local e exige o token gerado; em servidor remoto, pode ser acessada por túnel SSH. Não publique credenciais reais em projetos Wokwi compartilhados.
 
-```bash
-curl -fsS -X POST http://127.0.0.1:3000/api/commands \
-  -H "Authorization: Bearer $API_TOKEN" -H 'Content-Type: application/json' \
-  -d '{"commandId":"demo-reconhecer-001","requestId":"ID_ATIVO","action":"ACK_HELP"}'
-curl -fsS -H "Authorization: Bearer $API_TOKEN" \
-  http://127.0.0.1:3000/api/commands/demo-reconhecer-001
-```
-
-Espere `APPLIED` e confirme `ACKNOWLEDGED` em `state`. Depois envie outra intenção, com ID novo e `action: CLOSE_HELP`, mantendo o mesmo `requestId`. Verifique `NONE` em `state` e os dois eventos distintos no histórico. Não trate ACK de transporte MQTT como confirmação de atendimento.
-
-### Executar backend fora do Compose
-
-Com Node 22 e ferramentas de compilação nativa (Python/make/g++ se o binário SQLite pré-compilado não estiver disponível):
-
-```bash
-cd backend
-npm ci
-npm run build
-```
-
-Defina `MQTT_URL=mqtts://HOST_PUBLICO:8883`, `MQTT_USER=nightcare-backend`, `MQTT_PASSWORD` com a senha gerada, `MQTT_CA_FILE` com caminho absoluto para `secrets/mosquitto/ca.crt` e `API_TOKEN`. `DB_PATH` é opcional (padrão `./data/nightcare.sqlite`), `HOST` é `127.0.0.1` e `PORT` é `3000`. Execute `npm start`. Só execute uma instância do backend por broker: o client ID fixo é `nightcare-backend`.
-
-SQLite usa WAL e tabelas `devices`, `device_configs`, `events`, `assistance_requests`, `commands`. O estado atual é autoritativo para o pedido ativo; reenvios antigos de eventos não reabrem pedidos encerrados. Configuração desejada e comandos são persistidos antes de publicar. Ao reconectar, o backend repete a última configuração retida e comandos não confirmados ainda dentro da validade. Eventos com hora inválida preservam `occurredAt=null` e recebem horário de chegada no banco.
-
-## Validação e demonstração
-
-Execute os testes reproduzíveis sem depender da versão local do Node:
-
-```bash
-bash scripts/test-backend.sh
-bash scripts/test-integration.sh
-pio run
-npm audit --prefix backend
-bash -n scripts/setup.sh scripts/test-backend.sh scripts/test-integration.sh
-```
-
-Testes automáticos cobrem deduplicação/replay, ordem de eventos de assistência, estado retido sem falsa presença, heartbeat de 45 s, configuração inválida/versão monotônica, correlação de ACK, comandos duplicados/conflitantes, timeout de dez segundos, replay somente antes da validade, autenticação e respostas da API. Compilar não substitui testar o circuito no simulador.
-
-| Cenário manual | Resultado esperado |
-| --- | --- |
-| `auto`, `hora 21:59`, movimento | luz apagada |
-| `hora 22:00`, movimento | luz no brilho configurado |
-| `hora 05:59` e depois `hora 06:00` | permitida antes do fim, apaga no fim |
-| `agenda 00:00 00:00` | automático habilitado o dia inteiro |
-| PIR inativo e novo movimento antes do prazo | desligamento cancelado |
-| `off` e botão AJUDA | pedido abre mesmo com luz desligada |
-| Botão mantido pressionado | um único incremento |
-| `hora invalida`, movimento | luz aceita movimento; comando remoto recusado |
-| `hora real`, aguardar NTP | comando remoto permitido com UTC válido |
-| Reconhecer e encerrar via API | ACKs correlacionados, LED e histórico coerentes |
-| Reenviar comando com mesmo ID/corpo | sem segunda transição |
-| ID antigo com outro pedido | rejeitado |
-| Configuração inválida | rejeição integral, sem alterar saída/NVS |
-| Configuração repetida com mesma versão | sem nova gravação NVS |
-| Desconectar Wi-Fi/broker | botão/luz locais continuam; API fica offline |
-| Reconectar | estado atual e fila enviados, sem duplicar histórico |
-| Mais de 100 eventos offline | perdas contadas, prioridade para assistência |
-| `reiniciar` com pedido reconhecido | mesmo pedido e estado recuperados |
-| Reiniciar backend/broker | SQLite, configuração e dados do broker preservados |
-
-Verifique TLS de fora do servidor, substituindo o host:
-
-```bash
-openssl s_client -connect mqtt.seudominio.com:8883 \
-  -servername mqtt.seudominio.com -verify_hostname mqtt.seudominio.com \
-  -CAfile secrets/mosquitto/ca.crt -verify_return_error </dev/null
-```
-
-Com IPv4, use `-verify_ip` em lugar de `-verify_hostname`. Uma CA errada ou outro hostname deve falhar. A autenticação sem usuário/senha deve ser recusada, e o usuário do dispositivo não pode publicar em `config/set` ou tópicos de outro dispositivo.
-
-### Operação e diagnóstico
-
-`docker compose logs --tail=100 backend mosquitto` mostra conexões e payloads rejeitados, sem imprimir senhas. Se MQTT não conectar no Wokwi, confira domínio público, TCP 8883, CA completa, credencial exclusiva, validade do certificado, NTP e SAN. O nome `mosquitto` funciona apenas na rede Docker. Se só houver estado antigo em SQLite, aguarde um heartbeat novo para presença online.
-
-O volume `sqlite_data` contém o banco e `mosquitto_data` contém a persistência MQTT. `docker compose down` preserva ambos; `down -v` apaga dados e não deve ser usado para reinício normal. Faça backup consistente de SQLite por sua API de backup ou com backend parado (WAL não pode ser ignorado), além de `.env` e `secrets/` em local seguro. Nunca versione credenciais ou dados de demonstração pessoais.
-
-Limites: um dispositivo e um ambiente; sem interface de cuidador neste escopo; UTC−3 fixo; fila em RAM; entrega remota depende da internet; demonstração real no Wokwi e acesso público devem ser validados com seu host. A simulação representa a luminária por LED: uma luminária real requer estágio de potência e alimentação adequados.
-
-Referências: [ESP-MQTT e envio por fila](https://docs.espressif.com/projects/esp-idf/en/v4.4/esp32/api-reference/protocols/mqtt.html), [Fastify](https://fastify.dev/docs/latest/Reference/Server/), [rede do Wokwi](https://docs.wokwi.com/guides/esp32-wifi).
-
-
-O teste de integração cria credenciais descartáveis em `.validation/run-*`, não publica portas no host, inicia os dois serviços, valida TLS/ACL e fluxos MQTT/API, reinicia os serviços para verificar persistência e remove apenas os volumes/contêineres do projeto de testes ao terminar. Os arquivos ignorados são preservados para diagnóstico. Docker Desktop precisa compartilhar a pasta do projeto. As mensagens do dispositivo nesse teste são produzidas por um cliente MQTT de teste; não equivalem à execução do firmware no Wokwi.
+Faça backup de SQLite com backend parado ou pela API de backup do SQLite; não ignore o WAL ao copiar um banco em uso. O projeto continua limitado a um dispositivo, UTC−3 fixo e eventos pendentes em RAM. Uma luminária física exige circuito de potência e alimentação apropriados; o LED representa essa saída na simulação.
