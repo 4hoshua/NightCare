@@ -1,0 +1,13 @@
+**/node_modules
+**/dist
+.git
+.env
+secrets
+AGENTS.md
+*.pdf
+Wokwi/mqtt_secrets.h
+.pio
+data
+.validation/
+.env.*
+**/*.sqlite*

@@ -6,6 +6,25 @@
 #include <string.h>
 #include <esp_random.h>
 #include <limits.h>
+#include <atomic>
+#include <ArduinoJson.h>
+#include <mqtt_client.h>
+#include <esp_idf_version.h>
+#include <freertos/FreeRTOS.h>
+#include <freertos/queue.h>
+#if __has_include("mqtt_secrets.h")
+#include "mqtt_secrets.h"
+#else
+#include "mqtt_secrets.example.h"
+#endif
+
+void recordEvent(const char* type, const char* request = nullptr);
+void beginConnectivity();
+void updateConnectivity(unsigned long now);
+uint32_t appliedConfigVersion = 0;
+String commandJournal = "[]";
+String bootId;
+uint32_t eventCounter = 0;
 
 // ---------- Hardware ----------
 
@@ -272,13 +291,14 @@ String serializeConfiguration() {
   snprintf(
     text,
     sizeof(text),
-    "1,%u,%u,%u,%u,%u,%d",
+    "2,%u,%u,%u,%u,%u,%d,%lu",
     static_cast<unsigned>(config.mode),
     static_cast<unsigned>(config.brightness),
     static_cast<unsigned>(config.offDelaySec),
     static_cast<unsigned>(config.startMinute),
     static_cast<unsigned>(config.endMinute),
-    config.utcOffset
+    config.utcOffset,
+    static_cast<unsigned long>(appliedConfigVersion)
   );
 
   return String(text);
@@ -312,9 +332,10 @@ void loadConfiguration() {
   int offset = 0;
   int consumed = 0;
 
+  unsigned long remoteVersion = 0;
   const int fields = sscanf(
     stored.c_str(),
-    "%u,%u,%u,%u,%u,%u,%d%n",
+    "%u,%u,%u,%u,%u,%u,%d,%lu%n",
     &version,
     &mode,
     &brightness,
@@ -322,13 +343,19 @@ void loadConfiguration() {
     &start,
     &end,
     &offset,
+    &remoteVersion,
     &consumed
   );
 
+  int parsedFields = fields;
+  if (version == 1) {
+    parsedFields = sscanf(stored.c_str(), "%u,%u,%u,%u,%u,%u,%d%n", &version, &mode, &brightness, &delaySec, &start, &end, &offset, &consumed);
+  }
   const bool valid =
-    fields == 7 &&
+    parsedFields == (version == 1 ? 7 : 8) &&
     consumed == static_cast<int>(stored.length()) &&
-    version == 1 &&
+    (version == 1 || version == 2) &&
+    remoteVersion <= 2147483647UL &&
     mode <= 2 &&
     brightness >= 1 && brightness <= 100 &&
     delaySec >= 1 && delaySec <= 600 &&
@@ -348,6 +375,7 @@ void loadConfiguration() {
   config.startMinute = start;
   config.endMinute = end;
   config.utcOffset = offset;
+  appliedConfigVersion = remoteVersion;
 
   savedConfig = stored;
 
@@ -409,13 +437,8 @@ struct AssistanceController {
   }
 
   void generateRequestId() {
-    snprintf(
-      requestId,
-      sizeof(requestId),
-      "nightcare-001-%08lx%08lx",
-      static_cast<unsigned long>(esp_random()),
-      static_cast<unsigned long>(esp_random())
-    );
+    const String id = String("nightcare-001-") + bootId + "-" + String(++eventCounter);
+    snprintf(requestId, sizeof(requestId), "%s", id.c_str());
   }
 
   void stopBuzzer() {
@@ -447,7 +470,7 @@ struct AssistanceController {
       state == AssistanceState::NONE ? "-" : requestId
     );
 
-    persisted = preferences.putString("help", record) > 0;
+    persisted = preferences.putString("help", String(record) + "\n" + commandJournal) > 0;
 
     if (!persisted) {
       Serial.println(
@@ -468,7 +491,14 @@ struct AssistanceController {
       return;
     }
 
-    const String record = preferences.getString("help", "");
+    String record = preferences.getString("help", "");
+    const int separator = record.indexOf('\n');
+    if (separator >= 0) {
+      commandJournal = record.substring(separator + 1);
+      JsonDocument journal;
+      if (deserializeJson(journal, commandJournal) || !journal.is<JsonArray>() || journal.size() > 16) commandJournal = "[]";
+      record = record.substring(0, separator);
+    }
 
     if (record.isEmpty()) {
       Serial.println("[ASSISTENCIA] Nenhum chamado salvo.");
@@ -492,15 +522,15 @@ struct AssistanceController {
     );
 
     bool validId =
-      strlen(storedId) == 29 &&
+      strlen(storedId) >= 29 && strlen(storedId) < 48 &&
       strncmp(storedId, "nightcare-001-", 13) == 0;
 
     if (validId) {
-      for (size_t i = 13; i < 29; i++) {
+      for (size_t i = 13; i < strlen(storedId); i++) {
         const char c = storedId[i];
 
         if (!((c >= '0' && c <= '9') ||
-              (c >= 'a' && c <= 'f'))) {
+              (c >= 'a' && c <= 'f') || c == '-')) {
           validId = false;
           break;
         }
@@ -580,6 +610,7 @@ struct AssistanceController {
     }
 
     save();
+    recordEvent(pressCount == 1 ? "HELP_OPENED" : "HELP_REITERATED", requestId);
   }
 
   void acknowledge() {
@@ -604,6 +635,7 @@ struct AssistanceController {
     );
 
     save();
+    recordEvent("HELP_ACKNOWLEDGED", requestId);
   }
 
   void close() {
@@ -627,6 +659,7 @@ struct AssistanceController {
       pressCount
     );
 
+    recordEvent("HELP_CLOSED", requestId);
     state = AssistanceState::NONE;
     requestId[0] = '\0';
     pressCount = 0;
@@ -973,6 +1006,261 @@ void updateSerial() {
   }
 }
 
+// ---------- MQTT TLS: network I/O runs in the ESP-MQTT task ----------
+// MQTT callbacks never mutate local controllers or Preferences.
+struct InboundMessage { char topic[96]; char payload[1537]; bool retained; };
+struct PendingEvent { String payload; bool assistance; int packetId = -1; unsigned long sentAt = 0; };
+PendingEvent eventQueue[100];
+size_t eventCount = 0;
+int eventInFlight = -1;
+unsigned long eventInFlightSince = 0;
+uint32_t droppedEvents = 0;
+QueueHandle_t inboundQueue = nullptr;
+QueueHandle_t deliveryQueue = nullptr;
+esp_mqtt_client_handle_t mqttClient = nullptr;
+std::atomic<bool> mqttOnline{false};
+std::atomic<bool> mqttJustConnected{false};
+std::atomic<bool> mqttNeedsRetry{false};
+uint32_t retryDelayMs = 1000;
+unsigned long retryStartedMs = 0;
+uint32_t stateSequence = 0;
+unsigned long lastHeartbeatMs = 0;
+bool lastMotion = false;
+bool lastLight = false;
+String lastState;
+const char* MQTT_PREFIX = "nightcare/nightcare-001/";
+
+String utcNow() {
+  if (clockService.testMode != -1 || time(nullptr) < 1704067200) return "";
+  const time_t now = time(nullptr); struct tm utc; gmtime_r(&now, &utc);
+  char text[25]; strftime(text, sizeof(text), "%Y-%m-%dT%H:%M:%SZ", &utc); return text;
+}
+void envelope(JsonDocument& doc) { doc["schemaVersion"] = 1; doc["deviceId"] = "nightcare-001"; }
+const char* assistanceName() {
+  return assistance.state == AssistanceState::NONE ? "NONE" : assistance.state == AssistanceState::PENDING ? "PENDING" : "ACKNOWLEDGED";
+}
+void recordEvent(const char* type, const char* request) {
+  JsonDocument doc; envelope(doc);
+  // The opening event ID is exactly its requestId; later events have fresh IDs.
+  doc["eventId"] = strcmp(type,"HELP_OPENED") == 0 ? String(request) : String("nightcare-001-") + bootId + "-" + String(++eventCounter);
+  doc["bootId"] = bootId; doc["type"] = type; doc["uptimeMs"] = millis();
+  const String timestamp = utcNow();
+  if (timestamp.isEmpty()) doc["occurredAt"] = nullptr; else doc["occurredAt"] = timestamp;
+  if (request && *request) doc["requestId"] = request; else doc["requestId"] = nullptr;
+  doc["pressCount"] = assistance.pressCount;
+  if (eventCount == 100) {
+    size_t victim = 0;
+    for (size_t i = 0; i < eventCount; ++i) if (!eventQueue[i].assistance) { victim = i; break; }
+    for (size_t i = victim; i + 1 < eventCount; ++i) eventQueue[i] = eventQueue[i + 1];
+    --eventCount; ++droppedEvents;
+  }
+  auto& item = eventQueue[eventCount++];
+  item.payload = ""; serializeJson(doc,item.payload); item.assistance = strncmp(type,"HELP_",5) == 0; item.packetId = -1;
+}
+int enqueueMqtt(const char* suffix, const String& payload, bool retained) {
+  if (!mqttClient || !mqttOnline) return -1;
+  const String topic = String(MQTT_PREFIX) + suffix;
+  return esp_mqtt_client_enqueue(mqttClient,topic.c_str(),payload.c_str(),payload.length(),1,retained,true);
+}
+void sendAck(JsonDocument& doc, const char* status, const char* reason) {
+  envelope(doc); doc["status"] = status; doc["reason"] = reason;
+  String payload; serializeJson(doc,payload); enqueueMqtt("acks",payload,false);
+}
+void mqttCallback(void*, esp_event_base_t, int32_t eventId, void* data) {
+  auto* event = static_cast<esp_mqtt_event_handle_t>(data);
+  if (eventId == MQTT_EVENT_CONNECTED) {
+    mqttOnline = true; mqttJustConnected = true; mqttNeedsRetry = false;
+    esp_mqtt_client_subscribe(event->client,"nightcare/nightcare-001/config/set",1);
+    esp_mqtt_client_subscribe(event->client,"nightcare/nightcare-001/commands",1);
+  } else if (eventId == MQTT_EVENT_DISCONNECTED) {
+    mqttOnline = false; mqttNeedsRetry = true;
+  } else if (eventId == MQTT_EVENT_PUBLISHED) {
+    const int id = event->msg_id;
+    xQueueSend(deliveryQueue,&id,0);
+  } else if (eventId == MQTT_EVENT_DATA) {
+    static InboundMessage message;
+    static size_t received = 0;
+    if (event->current_data_offset == 0) {
+      received = 0; memset(&message,0,sizeof(message));
+      if (event->topic_len <= 0 || event->topic_len >= sizeof(message.topic) || event->total_data_len > 1536) return;
+      memcpy(message.topic,event->topic,event->topic_len); message.retained = event->retain;
+    }
+    if (message.topic[0] == '\0' || event->total_data_len > 1536 || event->current_data_offset != received) return;
+    memcpy(message.payload + received,event->data,event->data_len); received += event->data_len;
+    if (received == event->total_data_len) {
+      message.payload[received] = '\0';
+      if (xQueueSend(inboundQueue,&message,0) != pdTRUE) Serial.println("[MQTT] Fila de entrada cheia: mensagem sem confirmação.");
+      message.topic[0] = '\0';
+    }
+  }
+}
+void beginConnectivity() {
+  inboundQueue = xQueueCreate(8,sizeof(InboundMessage));
+  deliveryQueue = xQueueCreate(32,sizeof(int));
+  if (!inboundQueue || !deliveryQueue) { Serial.println("[MQTT] Sem memoria; controle local continua."); return; }
+  if (strstr(MQTT_HOST,".example") || strstr(MQTT_PASSWORD,"SUBSTITUA")) { Serial.println("[MQTT] Preencha mqtt_secrets.h para habilitar a rede."); return; }
+  static String uri = String("mqtts://") + MQTT_HOST + ":8883";
+  static const char will[] = "{\"schemaVersion\":1,\"deviceId\":\"nightcare-001\",\"status\":\"offline\"}";
+  esp_mqtt_client_config_t cfg = {};
+#if ESP_IDF_VERSION_MAJOR >= 5
+  cfg.broker.address.uri = uri.c_str(); cfg.broker.verification.certificate = MQTT_CA;
+  cfg.credentials.username = MQTT_USER; cfg.credentials.authentication.password = MQTT_PASSWORD;
+  cfg.credentials.client_id = "nightcare-001";
+  cfg.session.last_will.topic = "nightcare/nightcare-001/availability";
+  cfg.session.last_will.msg = will; cfg.session.last_will.qos = 1; cfg.session.last_will.retain = true;
+  cfg.session.keepalive = 15; cfg.network.disable_auto_reconnect = true; cfg.network.timeout_ms = 5000;
+  cfg.buffer.size = 2048;
+#else
+  cfg.uri = uri.c_str(); cfg.cert_pem = MQTT_CA;
+  cfg.username = MQTT_USER; cfg.password = MQTT_PASSWORD; cfg.client_id = "nightcare-001";
+  cfg.lwt_topic = "nightcare/nightcare-001/availability"; cfg.lwt_msg = will; cfg.lwt_qos = 1; cfg.lwt_retain = true;
+  cfg.keepalive = 15; cfg.disable_auto_reconnect = true; cfg.network_timeout_ms = 5000; cfg.buffer_size = 2048;
+#endif
+  mqttClient = esp_mqtt_client_init(&cfg);
+  if (!mqttClient) { Serial.println("[MQTT] Inicializacao falhou; controle local continua."); return; }
+  esp_mqtt_client_register_event(mqttClient,static_cast<esp_mqtt_event_id_t>(ESP_EVENT_ANY_ID),mqttCallback,nullptr);
+  // Start after NTP: certificate validity must be checked against a real UTC clock.
+}
+bool mqttStarted = false;
+bool validInteger(JsonVariantConst v, long minimum, long maximum) { return v.is<long>() && v.as<long>() >= minimum && v.as<long>() <= maximum; }
+void applyRemoteConfig(JsonDocument& doc) {
+  JsonDocument ack;
+  if (!validInteger(doc["configVersion"],1,2147483647)) return;
+  const uint32_t version = doc["configVersion"].as<uint32_t>(); ack["configVersion"] = version;
+  Configuration candidate = config; uint16_t start = 0, end = 0;
+  const String mode = doc["mode"] | "";
+  const bool valid = doc.size() == 9 && doc["schemaVersion"].is<int>() && doc["schemaVersion"].as<int>() == 1 &&
+    String(doc["deviceId"] | "") == "nightcare-001" &&
+    (mode == "AUTO" || mode == "ON" || mode == "OFF") &&
+    validInteger(doc["brightnessPct"],1,100) && validInteger(doc["offDelaySec"],1,600) &&
+    parseHHMM(doc["startTime"] | "",start) && parseHHMM(doc["endTime"] | "",end) &&
+    String(doc["timezone"] | "") == "America/Sao_Paulo";
+  if (!valid) { sendAck(ack,"REJECTED","INVALID_CONFIG"); return; }
+  candidate.mode = mode == "AUTO" ? LightingMode::AUTO : mode == "ON" ? LightingMode::ON : LightingMode::OFF;
+  candidate.brightness = doc["brightnessPct"]; candidate.offDelaySec = doc["offDelaySec"];
+  candidate.startMinute = start; candidate.endMinute = end; candidate.utcOffset = -3;
+  if (version < appliedConfigVersion) { sendAck(ack,"REJECTED","STALE_VERSION"); return; }
+  if (version == appliedConfigVersion) {
+    const bool same = config.mode == candidate.mode && config.brightness == candidate.brightness && config.offDelaySec == candidate.offDelaySec && config.startMinute == start && config.endMinute == end && config.utcOffset == -3;
+    sendAck(ack,same ? "APPLIED" : "REJECTED",same ? "ALREADY_APPLIED" : "VERSION_CONFLICT"); return;
+  }
+  const auto previous = config; const auto previousVersion = appliedConfigVersion;
+  config = candidate; appliedConfigVersion = version;
+  const String serialized = serializeConfiguration();
+  if (!storageReady || preferences.putString("config",serialized) == 0) {
+    config = previous; appliedConfigVersion = previousVersion; sendAck(ack,"REJECTED","PERSISTENCE_ERROR"); return;
+  }
+  savedConfig = serialized; clockService.configureTimezone(); refreshLighting();
+  recordEvent("CONFIG_APPLIED"); sendAck(ack,"APPLIED","OK");
+}
+bool parseUtc(const char* value, time_t& result) {
+  // Accept API's millisecond precision and the canonical second precision only.
+  const size_t n = strlen(value);
+  if (n != 20 && n != 24) return false;
+  if (value[n-1] != 'Z' || (n == 24 && (value[19] != '.' || !isdigit(value[20]) || !isdigit(value[21]) || !isdigit(value[22])))) return false;
+  struct tm t = {}; char* end = strptime(value,"%Y-%m-%dT%H:%M:%S",&t);
+  if (!end || end != value+19) return false;
+  // mktime uses the local timezone; timegm is not portable in Arduino newlib.
+  const int offset = config.utcOffset * 3600;
+  t.tm_isdst = 0; result = mktime(&t) + offset;
+  struct tm normalized; gmtime_r(&result,&normalized); char text[20]; strftime(text,sizeof(text),"%Y-%m-%dT%H:%M:%S",&normalized);
+  return strncmp(text,value,19) == 0;
+}
+bool validId(const String& value) {
+  if (value.isEmpty() || value.length() > 64) return false;
+  for(size_t i=0;i<value.length();++i) if(!isalnum(value[i]) && value[i]!='-' && value[i]!='_') return false;
+  return true;
+}
+void applyRemoteCommand(JsonDocument& doc, bool retained) {
+  const String id = doc["commandId"] | ""; const String request = doc["requestId"] | ""; const String action = doc["action"] | "";
+  if (!validId(id) || !validId(request)) return;
+  JsonDocument ack; ack["commandId"] = id; ack["requestId"] = request;
+  const String fingerprint = request + "|" + action + "|" + String(doc["issuedAt"] | "") + "|" + String(doc["expiresAt"] | "");
+  if (retained) { sendAck(ack,"REJECTED","RETAINED_COMMAND"); return; }
+  if (doc.size() != 7 || !doc["schemaVersion"].is<int>() || doc["schemaVersion"].as<int>() != 1 || String(doc["deviceId"] | "") != "nightcare-001") { sendAck(ack,"REJECTED","INVALID_COMMAND"); return; }
+  JsonDocument journal; deserializeJson(journal,commandJournal);
+  for (JsonObject entry : journal.as<JsonArray>()) if (String(entry["id"] | "") == id) {
+    const bool same = String(entry["fingerprint"] | "") == fingerprint;
+    sendAck(ack,same ? "APPLIED" : "REJECTED",same ? "ALREADY_APPLIED" : "ID_CONFLICT"); return;
+  }
+  time_t issued = 0, expires = 0; const time_t now = time(nullptr);
+  if (clockService.testMode != -1 || !clockService.valid || now < 1704067200) { sendAck(ack,"REJECTED","CLOCK_INVALID"); return; }
+  if (!parseUtc(doc["issuedAt"] | "",issued) || !parseUtc(doc["expiresAt"] | "",expires) || expires-issued != 60 || issued > now+5 || now >= expires) { sendAck(ack,"REJECTED","EXPIRED_OR_INVALID_TIME"); return; }
+  if (request != assistance.requestId || assistance.state == AssistanceState::NONE) { sendAck(ack,"REJECTED","REQUEST_MISMATCH"); return; }
+  if (!((action == "ACK_HELP" && assistance.state == AssistanceState::PENDING) || (action == "CLOSE_HELP" && assistance.state == AssistanceState::ACKNOWLEDGED))) { sendAck(ack,"REJECTED","INVALID_TRANSITION"); return; }
+  // Atomically store resulting assistance state and idempotency journal in the SAME NVS value.
+  const auto previousState = assistance.state; const auto previousCount = assistance.pressCount;
+  const String previousId = assistance.requestId; const String previousJournal = commandJournal;
+  if (journal.size() >= 16) journal.as<JsonArray>().remove(0);
+  JsonObject entry = journal.as<JsonArray>().add<JsonObject>(); entry["id"] = id; entry["fingerprint"] = fingerprint;
+  commandJournal = ""; serializeJson(journal,commandJournal);
+  assistance.state = action == "ACK_HELP" ? AssistanceState::ACKNOWLEDGED : AssistanceState::NONE;
+  if (action == "CLOSE_HELP") { assistance.requestId[0] = '\0'; assistance.pressCount = 0; }
+  assistance.save();
+  if (!assistance.persisted) {
+    assistance.state = previousState; assistance.pressCount = previousCount; snprintf(assistance.requestId,sizeof(assistance.requestId),"%s",previousId.c_str()); commandJournal = previousJournal;
+    sendAck(ack,"REJECTED","PERSISTENCE_ERROR"); return;
+  }
+  recordEvent(action == "ACK_HELP" ? "HELP_ACKNOWLEDGED" : "HELP_CLOSED",request.c_str());
+  sendAck(ack,"APPLIED","OK");
+}
+void updateConnectivity(unsigned long now) {
+  if (inputs.motion != lastMotion) { lastMotion = inputs.motion; recordEvent(lastMotion ? "MOTION_STARTED" : "MOTION_ENDED"); }
+  const bool light = lighting.appliedPwm > 0;
+  if (light != lastLight) { lastLight = light; recordEvent(light ? "LIGHT_ON" : "LIGHT_OFF"); }
+  if (!mqttClient) return;
+  const bool ready = WiFi.status() == WL_CONNECTED && time(nullptr) >= 1704067200;
+  if (!mqttStarted && ready) { mqttStarted = esp_mqtt_client_start(mqttClient) == ESP_OK; }
+  if (mqttNeedsRetry && retryStartedMs == 0) retryStartedMs = now;
+  if (mqttNeedsRetry && ready && now-retryStartedMs >= retryDelayMs) {
+    esp_mqtt_client_reconnect(mqttClient); retryStartedMs = now; retryDelayMs = min(retryDelayMs*2,static_cast<uint32_t>(30000));
+  }
+  if (mqttJustConnected) {
+    mqttJustConnected = false; retryDelayMs = 1000; retryStartedMs = 0; lastState = "";
+    enqueueMqtt("availability","{\"schemaVersion\":1,\"deviceId\":\"nightcare-001\",\"status\":\"online\"}",true);
+    Serial.println("[MQTT] Conectado com TLS e QoS 1.");
+  }
+  InboundMessage incoming;
+  // At most one command/configuration per iteration, leaving time for local inputs.
+  if (xQueueReceive(inboundQueue,&incoming,0) == pdTRUE) {
+    JsonDocument doc;
+    if (!deserializeJson(doc,incoming.payload)) {
+      if (strcmp(incoming.topic,"nightcare/nightcare-001/config/set") == 0) applyRemoteConfig(doc);
+      else if (strcmp(incoming.topic,"nightcare/nightcare-001/commands") == 0) applyRemoteCommand(doc,incoming.retained);
+    }
+  }
+  int packetId;
+  while (xQueueReceive(deliveryQueue,&packetId,0) == pdTRUE) {
+    if (packetId == eventInFlight) eventInFlight = -1;
+    for (size_t i=0;i<eventCount;++i) if(eventQueue[i].packetId == packetId) {
+      for(size_t j=i;j+1<eventCount;++j) eventQueue[j]=eventQueue[j+1]; --eventCount; break;
+    }
+  }
+  if (!mqttOnline) return;
+  // One event in flight; keep the application copy until PUBACK, including across reconnection.
+  if (eventInFlight >= 0 && now-eventInFlightSince >= 60000UL) eventInFlight = -1;
+  if (eventCount && eventInFlight < 0) {
+    auto& event = eventQueue[0];
+    {
+      const int id = enqueueMqtt("events",event.payload,false);
+      if (id >= 0) { event.packetId = id; event.sentAt = now; eventInFlight = id; eventInFlightSince = now; }
+    }
+  }
+  JsonDocument state; envelope(state); state["bootId"] = bootId;
+  state["mode"] = modeName(); state["lightOn"] = light; state["brightnessPct"] = config.brightness;
+  state["motion"] = inputs.motion; state["assistanceStatus"] = assistanceName();
+  if (assistance.state == AssistanceState::NONE) state["requestId"] = nullptr; else state["requestId"] = assistance.requestId;
+  state["pressCount"] = assistance.pressCount;
+  state["clockValid"] = clockService.valid && clockService.testMode == -1;
+  state["appliedConfigVersion"] = appliedConfigVersion; state["droppedEvents"] = droppedEvents;
+  state["persistenceOk"] = storageReady && (assistance.state == AssistanceState::NONE || assistance.persisted);
+  String comparable; serializeJson(state,comparable);
+  if (comparable != lastState || now-lastHeartbeatMs >= 15000UL) {
+    state["sequence"] = ++stateSequence; state["uptimeMs"] = now; String payload; serializeJson(state,payload);
+    if(enqueueMqtt("state",payload,true)>=0) {lastState=comparable;lastHeartbeatMs=now;}
+  }
+}
+
 // ---------- Inicializacao e loop ----------
 
 void setup() {
@@ -988,11 +1276,17 @@ void setup() {
   digitalWrite(BUZZER_PIN, LOW);
 
   Serial.println();
-  Serial.println("=== NightCare - Etapa 4 ===");
+  Serial.println("=== NightCare ===");
 
+  char boot[17];
+  snprintf(boot, sizeof(boot), "%08lx%08lx", static_cast<unsigned long>(esp_random()), static_cast<unsigned long>(esp_random()));
+  bootId = boot;
   loadConfiguration();
   clockService.begin();
   assistance.begin();
+  beginConnectivity();
+  recordEvent("BOOT");
+  if (assistance.state != AssistanceState::NONE) recordEvent("HELP_RECOVERED", assistance.requestId);
 
   printHelp();
   refreshLighting();
@@ -1013,4 +1307,5 @@ void loop() {
 
   assistance.update(now, inputs.buttonPressed);
   updateSerial();
+  updateConnectivity(now);
 }

@@ -1,0 +1,16 @@
+user nightcare-001
+ topic write nightcare/nightcare-001/events
+ topic write nightcare/nightcare-001/state
+ topic write nightcare/nightcare-001/availability
+ topic write nightcare/nightcare-001/acks
+ topic read nightcare/nightcare-001/config/set
+ topic read nightcare/nightcare-001/commands
+user nightcare-backend
+ topic read nightcare/nightcare-001/events
+ topic read nightcare/nightcare-001/state
+ topic read nightcare/nightcare-001/availability
+ topic read nightcare/nightcare-001/acks
+ topic write nightcare/nightcare-001/config/set
+ topic write nightcare/nightcare-001/commands
+user nightcare-health
+ topic write health/nightcare

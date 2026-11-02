@@ -1,0 +1,45 @@
+services:
+  mosquitto:
+    image: eclipse-mosquitto:2.0.22
+    restart: unless-stopped
+    ports:
+      - "8883:8883"
+    volumes:
+      - ./mosquitto/mosquitto.conf:/mosquitto/config/mosquitto.conf:ro
+      - ./mosquitto/acl:/mosquitto/config/acl:ro
+      - ./secrets/mosquitto:/mosquitto/certs:ro
+      - mosquitto_data:/mosquitto/data
+    healthcheck:
+      test: ["CMD-SHELL", "mosquitto_pub -h mosquitto -p 8883 --cafile /mosquitto/certs/ca.crt -u nightcare-health -P \"$$(cat /mosquitto/certs/health-password)\" -t health/nightcare -m ok -q 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 4
+      start_period: 10s
+  backend:
+    build:
+      context: .
+      dockerfile: backend/Dockerfile
+    restart: unless-stopped
+    depends_on:
+      mosquitto:
+        condition: service_healthy
+    environment:
+      MQTT_URL: mqtts://mosquitto:8883
+      MQTT_USER: nightcare-backend
+      MQTT_PASSWORD: ${MQTT_BACKEND_PASSWORD:?Execute scripts/setup.sh HOST_PUBLICO}
+      MQTT_CA_FILE: /run/nightcare/ca.crt
+      API_TOKEN: ${API_TOKEN:?Execute scripts/setup.sh HOST_PUBLICO}
+    ports:
+      - "127.0.0.1:3000:3000"
+    volumes:
+      - sqlite_data:/data
+      - ./secrets/mosquitto/ca.crt:/run/nightcare/ca.crt:ro
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:3000/health/ready').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+      interval: 15s
+      timeout: 5s
+      retries: 4
+      start_period: 30s
+volumes:
+  mosquitto_data:
+  sqlite_data:

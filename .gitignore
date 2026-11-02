@@ -1,2 +1,16 @@
 AGENTS.md
 NightCare_Ordem_de_Implementacao.pdf
+
+node_modules/
+dist/
+.pio/
+.env
+.env.*
+!.env.example
+secrets/
+data/
+*.sqlite*
+Wokwi/mqtt_secrets.h
+.nightcare-write-check
+
+.validation/
