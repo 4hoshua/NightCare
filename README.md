@@ -97,6 +97,21 @@ O botão abre um pedido `PENDING`. **Reconhecer** muda para `ACKNOWLEDGED`; **En
 
 Comandos exibem enviado, confirmado, recusado ou **não confirmado** após dez segundos sem ACK. São válidos por 60 s. O painel bloqueia ações incompatíveis e aguarda a confirmação; o backend e o firmware também validam pedido, relógio e transição. Um ACK MQTT de transporte não confirma atendimento.
 
+## Navegação do painel
+
+A barra lateral pode ser expandida ou recolhida. No celular, o botão de menu abre as mesmas opções. Cada tela possui endereço próprio (`#dashboard`, `#iluminacao`, `#assistencia`, `#administracao`) e funciona com voltar/avançar do navegador.
+
+| Tela | Uso |
+| --- | --- |
+| Dashboard | visão geral de conexão, luz, movimento e chamado, com atalhos de acompanhamento |
+| Iluminação e movimento | estado da luz e PIR; edição de modo, brilho, agenda e prazo |
+| Assistência | pedido ativo, tempo desde abertura, reconhecer/encerrar e resultados das últimas ações |
+| Administração | histórico por período/tipo, configuração desejada/confirmada e detalhes do dispositivo |
+
+O indicador de chamado e o controle de som ficam disponíveis em todas as telas. Trocar de tela preserva o formulário em edição, os filtros, o áudio habilitado e a conexão em tempo real. Administração organiza as informações existentes; não cria um perfil de acesso separado.
+
+Modo e brilho atuais vêm do estado do ESP32. Agenda e prazo exibidos como configuração remota confirmada vêm da versão aplicada informada pelo dispositivo; não representam alterações seriais posteriores nesses campos. Se os detalhes dessa versão não estiverem disponíveis, o painel informa a ausência, sem usar uma configuração desejada pendente como se estivesse aplicada. Offline, os dados são identificados como última informação recebida.
+
 ## Circuito e controle local
 
 | Componente | Ligação |
@@ -137,47 +152,7 @@ Brilho aceita 1–100%, prazo 1–600 s, e `fuso` aceita inteiro −12..+14. A c
 
 Configuração e chamado ativo são gravados em NVS. Teste primeiro com `reiniciar`; parar e reabrir o Wokwi é outro cenário, pois a persistência depende do simulador. A fila de eventos e o contador de perdas estão em RAM e desaparecem no reboot.
 
-## Roteiro de validação pelo usuário
-
-Mantenha monitor serial e dashboard abertos. Anote ação, resultado esperado e observado. Ao terminar testes de horário, use `hora real`. Se uma configuração desejada retida for reaplicada após reinício, ela pode substituir alterações seriais de teste.
-
-| Cenário / ação | Resultado esperado |
-| --- | --- |
-| Painel: `AUTO`, brilho 55%, agenda 00:00–00:00, prazo 5 s | versão desejada avança e aplicada é confirmada; movimento acende no brilho escolhido |
-| Serial: `agenda 22:00 06:00`, `auto`, `hora 21:59`, movimento | luz apagada |
-| `hora 22:00`, movimento | luz acesa |
-| `hora 05:59`, depois `hora 06:00` | movimento permitido antes do fim; luz apaga no fim |
-| PIR inativo, novo movimento antes do prazo | desligamento cancelado; contar novamente após PIR inativo |
-| `off`, pressionar AJUDA e manter pressionado | um clique abre um chamado mesmo fora da agenda; manter pressionado não gera novos cliques |
-| Soltar e pressionar AJUDA novamente | mesmo requestId e reiteração no histórico |
-| `hora real`, aguardar NTP; painel: Reconhecer | confirmação, estado reconhecido, LED contínuo e buzzer silencioso |
-| Recarregar o painel antes de encerrar | chamado continua visível, com horário de abertura preservado |
-| Painel: Encerrar | confirmação, estado sem chamado e evento distinto no histórico |
-| Ativar aviso sonoro e abrir outro chamado | aviso sonoro com painel aberto; reconhecer silencia |
-| Filtrar histórico por tipo e período | apenas eventos correspondentes; período usa horário de recebimento no backend |
-| `hora invalida`, movimento | controle local aceita movimento em AUTO; painel mostra relógio inválido e bloqueia comandos |
-| Enviar brilho 0 pela API | HTTP 400; nenhuma configuração parcial aplicada |
-| Reenviar comando com mesmo ID/corpo | mesma intenção, sem segunda transição |
-| Usar requestId antigo para pedido novo | HTTP 409 ou ACK de recusa, sem encerrar o pedido novo |
-| Com pedido reconhecido, `reiniciar` | mesmo pedido e estado recuperados da NVS |
-
-### Falha de rede e recuperação
-
-**Parar o backend** testa sua indisponibilidade; o ESP32 pode continuar conectado ao broker. Execute em outro terminal:
-
-```bash
-docker compose --env-file .env.demo -p nightcare-demo -f compose.demo.yml stop backend
-# Teste PIR e botão no Wokwi e observe a perda de atualização do painel.
-bash scripts/demo.sh
-```
-
-Depois de voltar, o painel reconecta; SQLite mantém os registros anteriores e o estado atual chega novamente. Eventos publicados enquanto o backend estava parado podem não entrar no histórico: a confirmação QoS 1 do broker permite ao ESP32 removê-los da fila, e a assinatura do backend usa sessão limpa. O chamado ativo continua recuperável pelo estado retido e pela NVS.
-
-**Interromper a rede do ESP32** testa a fila e o controle local offline. Na demo, envie `rede off` no monitor serial: o firmware desliga a conexão Wi-Fi e suspende sua reconexão automática, mantendo o loop local executando. Teste PIR e botão e aguarde até 45 s para verificar offline no painel. Envie `rede on` para reconectar sem reiniciar nem apagar a fila. Esses comandos só existem na compilação demo e não são persistidos. Não é necessário desconectar a internet do computador nem parar o broker público compartilhado.
-
-Com a simulação ainda executando, confirme PIR e botão responsivos, offline no painel por Last Will ou timeout, e retorno do estado ao reconectar. Gere mais de 100 eventos durante a interrupção — por exemplo, alternando `on`/`off` e pressionando AJUDA — e confira `droppedEvents`. A fila descarta primeiro o evento comum mais antigo; se todos forem de assistência, descarta o mais antigo. Ao reconectar, eventos pendentes são reenviados e deduplicados por `eventId`. Teste de fila no firmware exige execução efetiva, não é comprovado pelo cliente MQTT dos testes automatizados.
-
-### Testes automatizados e compilação
+## Testes automatizados e compilação
 
 ```bash
 bash scripts/test-backend.sh
@@ -199,7 +174,7 @@ pio run -e esp32dev
 
 O ambiente fixa `espressif32@6.12.0`, Arduino ESP32 2.0.17 e ArduinoJson 7.4.2. O pacote gerado inclui `wokwi.toml` com o binário demo para uso opcional da extensão VS Code; o caminho principal é o navegador gratuito. A variante ESP-IDF 5 do código não está validada.
 
-Os resultados efetivamente obtidos estão em [docs/VALIDACAO.md](docs/VALIDACAO.md). Compilação e cliente MQTT não substituem testes do circuito no Wokwi.
+O [roteiro de testes manuais](docs/VALIDACAO.md) apresenta dois percursos: comandos no terminal do ESP32 e operação dos painéis com sensores e botão. Cada teste inclui uma condição anormal, o tratamento esperado e instruções para restaurar o ambiente. Compilação e cliente MQTT não substituem testes do circuito no Wokwi.
 
 ## API e tópicos MQTT
 

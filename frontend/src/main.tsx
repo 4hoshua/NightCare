@@ -1,100 +1,51 @@
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { createRoot } from "react-dom/client";
+import {
+  defaults,
+  errorNames,
+  date,
+  type Settings,
+  type Snapshot,
+  type EventRow,
+} from "./model";
+import { Sidebar, Icon, pages, readPage } from "./navigation";
+import {
+  DashboardView,
+  LightingView,
+  AssistanceView,
+  AdminView,
+  StatusBadge,
+} from "./views";
 import "./style.css";
-
-type Settings = {
-  mode: "AUTO" | "ON" | "OFF";
-  brightnessPct: number;
-  offDelaySec: number;
-  startTime: string;
-  endTime: string;
-  timezone: string;
-};
-type State = {
-  mode: string;
-  lightOn: boolean;
-  brightnessPct: number;
-  motion: boolean;
-  assistanceStatus: "NONE" | "PENDING" | "ACKNOWLEDGED";
-  requestId: string | null;
-  clockValid: boolean;
-  appliedConfigVersion: number;
-  droppedEvents: number;
-  persistenceOk: boolean;
-};
-type Command = {
-  command_id: string;
-  request_id: string;
-  action: string;
-  status: string;
-  reason: string | null;
-  expires_at: number;
-};
-type Snapshot = {
-  eventCount: number;
-  brokerConnected: boolean;
-  device: { online: boolean; state: State | null; lastSeen: number | null };
-  configs: {
-    config_version: number;
-    payload: Settings;
-    status: string;
-    reason: string | null;
-  }[];
-  requests: { request_id: string; opened_at: number | null; status: string }[];
-  commands: Command[];
-};
-type EventRow = {
-  event_id: string;
-  type: string;
-  request_id: string | null;
-  occurred_at: string | null;
-  received_at: number;
-};
-const defaults: Settings = {
-  mode: "AUTO",
-  brightnessPct: 30,
-  offDelaySec: 30,
-  startTime: "22:00",
-  endTime: "06:00",
-  timezone: "America/Sao_Paulo",
-};
-const names: Record<string, string> = {
-  AUTO: "Automático",
-  ON: "Ligado",
-  OFF: "Desligado",
-  NONE: "Sem chamado",
-  PENDING: "Aguardando atendimento",
-  ACKNOWLEDGED: "Reconhecido",
-  APPLIED: "Confirmado",
-  REJECTED: "Recusado",
-  UNCONFIRMED: "Não confirmado",
-  ACK_HELP: "Reconhecer",
-  CLOSE_HELP: "Encerrar",
-};
-const eventNames: Record<string, string> = {
-  BOOT: "Inicialização",
-  MOTION_STARTED: "Movimento detectado",
-  MOTION_ENDED: "Fim do movimento",
-  LIGHT_ON: "Luz acesa",
-  LIGHT_OFF: "Luz apagada",
-  HELP_OPENED: "Chamado aberto",
-  HELP_REITERATED: "Ajuda reiterada",
-  HELP_ACKNOWLEDGED: "Chamado reconhecido",
-  HELP_CLOSED: "Chamado encerrado",
-  HELP_RECOVERED: "Chamado recuperado",
-  CONFIG_APPLIED: "Configuração aplicada",
-};
-const date = (value: number | string | null) =>
-  value === null ? "Sem registro" : new Date(value).toLocaleString("pt-BR");
-const errorNames: Record<string, string> = {
-  DEVICE_OFFLINE: "Dispositivo offline.",
-  CLOCK_INVALID: "Aguarde NTP e retorne a hora real no ESP32.",
-  REQUEST_MISMATCH: "O chamado mudou. Aguarde a atualização.",
-  INVALID_TRANSITION: "A ação não corresponde ao estado atual.",
-  UNAUTHORIZED: "Token inválido.",
-  INVALID_PAYLOAD: "Confira os campos e seus limites.",
-};
 function App() {
+  const [page, setPage] = useState(readPage);
+  const [collapsed, setCollapsed] = useState(false);
+  const [mobileOpen, setMobileOpen] = useState(false);
+  const closeMenu = useCallback(() => setMobileOpen(false), []);
+  useEffect(() => {
+    const navigate = () => {
+      const current = readPage();
+      if (location.hash !== `#${current}`)
+        history.replaceState(null, "", `#${current}`);
+      setPage(current);
+      setMobileOpen(false);
+    };
+    navigate();
+    window.addEventListener("hashchange", navigate);
+    const desktop = matchMedia("(min-width: 801px)");
+    const resize = () => {
+      if (desktop.matches) setMobileOpen(false);
+    };
+    desktop.addEventListener("change", resize);
+    return () => {
+      window.removeEventListener("hashchange", navigate);
+      desktop.removeEventListener("change", resize);
+    };
+  }, []);
+  useEffect(() => {
+    document.title = `${pages.find((p) => p.id === page)!.label} · NightCare`;
+    window.scrollTo(0, 0);
+  }, [page]);
   const [demo, setDemo] = useState<boolean | null>(null),
     [token, setToken] = useState(""),
     [tokenInput, setTokenInput] = useState("");
@@ -320,388 +271,205 @@ function App() {
       setSending(false);
     }
   }
+  const currentPage = pages.find((p) => p.id === page)!;
+  const online = connected && !!snapshot?.device.online;
+  const activeRequest = !!state?.requestId;
   return (
-    <>
-      <header>
-        <div className="brand">
-          <span className="moon">☾</span>
-          <div>
-            <strong>NightCare</strong>
-            <small>Apoio ao deslocamento noturno</small>
+    <div className={`app-shell ${collapsed ? "nav-collapsed" : ""}`}>
+      <a
+        className="skip-link"
+        href="#page-content"
+        onClick={(event) => {
+          event.preventDefault();
+          document.getElementById("page-content")?.focus();
+        }}
+      >
+        Pular para o conteúdo
+      </a>
+      <Sidebar
+        page={page}
+        collapsed={collapsed}
+        onCollapse={() => setCollapsed((v) => !v)}
+        mobileOpen={mobileOpen}
+        onClose={closeMenu}
+        activeRequest={activeRequest}
+      />
+      <div className="app-body" inert={mobileOpen}>
+        <header className="topbar">
+          <div className="topbar-location">
+            <button
+              className="icon-button menu-toggle"
+              aria-label="Abrir menu"
+              aria-expanded={mobileOpen}
+              aria-controls="primary-navigation"
+              onClick={() => setMobileOpen(true)}
+            >
+              <Icon name="menu" />
+            </button>
+            <span className="breadcrumb">
+              Seu ambiente<span>/</span>
+              <strong>{currentPage.label}</strong>
+            </span>
           </div>
-        </div>
-        <span className="tag">
-          MVP acadêmico{demo ? " · demonstração pública" : ""}
-        </span>
-      </header>
-      <main>
-        <div className="heading">
-          <div>
-            <p className="eyebrow">SUPERVISÃO DO AMBIENTE</p>
-            <h1>Cuidado durante a noite</h1>
-            <p>Dispositivo nightcare-001 · um ambiente</p>
-          </div>
-          <button className="secondary" onClick={toggleSound}>
-            {sound ? "Desativar som" : "Ativar aviso sonoro"}
-          </button>
-        </div>
-        {demo === false && (
-          <form
-            className="login"
-            onSubmit={(e) => {
-              e.preventDefault();
-              setToken(tokenInput);
-            }}
-          >
-            <label>
-              Token da API{" "}
-              <input
-                type="password"
-                value={tokenInput}
-                onChange={(e) => setTokenInput(e.target.value)}
-                autoComplete="off"
-                required
-              />
-            </label>
-            <button>Conectar</button>
-          </form>
-        )}
-        {error && (
-          <p role="alert" className="error">
-            {error}
-          </p>
-        )}
-        {notice && (
-          <p role="status" className="notice">
-            {notice}
-          </p>
-        )}
-        {!connected && (
-          <p role="alert" className="notice">
-            {demo === null
-              ? "Conectando ao backend…"
-              : "Painel sem atualização ao vivo. Os valores exibidos podem estar desatualizados."}
-          </p>
-        )}
-        <section className="metrics" aria-label="Estado do dispositivo">
-          <article>
-            <small>DISPOSITIVO</small>
-            <strong
-              className={
-                connected && snapshot?.device.online ? "good" : "muted"
+          <div className="topbar-actions">
+            <a
+              className={`help-indicator ${activeRequest ? "active" : ""}`}
+              href="#assistencia"
+              aria-label={
+                activeRequest
+                  ? "Chamado ativo — abrir Assistência"
+                  : "Abrir Assistência"
               }
             >
-              {!snapshot
-                ? "Aguardando dados"
-                : connected && snapshot.device.online
-                  ? "Online"
-                  : "Offline / sem atualização"}
-            </strong>
-            <span>
-              Última comunicação: {date(snapshot?.device.lastSeen ?? null)}
-            </span>
-          </article>
-          <article>
-            <small>ILUMINAÇÃO</small>
-            <strong>
-              {state ? (state.lightOn ? "Acesa" : "Apagada") : "—"}
-            </strong>
-            <span>
-              {state
-                ? `${state.brightnessPct}% · ${names[state.mode]}`
-                : "Aguardando primeiro estado"}
-            </span>
-          </article>
-          <article>
-            <small>MOVIMENTO</small>
-            <strong>
-              {state ? (state.motion ? "Detectado" : "Sem movimento") : "—"}
-            </strong>
-            <span>
-              Relógio:{" "}
-              {state ? (state.clockValid ? "válido" : "inválido / teste") : "—"}
-            </span>
-          </article>
-          <article>
-            <small>COMUNICAÇÃO</small>
-            <strong>
-              {snapshot?.brokerConnected
-                ? "Broker conectado"
-                : "Broker desconectado"}
-            </strong>
-            <span>
-              WebSocket: {connected ? "conectado" : "desconectado"} · perdas:{" "}
-              {state?.droppedEvents ?? "—"}
-            </span>
-            <span>
-              NVS:{" "}
-              {state ? (state.persistenceOk ? "operacional" : "falha") : "—"}
-            </span>
-          </article>
-        </section>
-        <div className="columns">
-          <section
-            className={`card assistance ${state?.assistanceStatus === "PENDING" ? "pending" : ""}`}
-          >
-            <p className="eyebrow">ASSISTÊNCIA</p>
-            <h2>
-              {state ? names[state.assistanceStatus] : "Aguardando dispositivo"}
-            </h2>
-            {state?.requestId ? (
-              <>
-                <p className="request">Pedido {state.requestId}</p>
-                <p>
-                  Aberto há{" "}
-                  {wait === null
-                    ? "tempo desconhecido"
-                    : `${Math.floor(wait / 60)} min ${wait % 60} s`}
-                </p>
-                <p>
-                  {state.assistanceStatus === "PENDING"
-                    ? "O botão foi acionado. Reconheça para indicar atendimento."
-                    : "Atendimento reconhecido. Encerre quando concluído."}
-                </p>
-              </>
-            ) : (
-              <p>
-                Os pedidos feitos no botão do ESP32 aparecem aqui e permanecem
-                até o encerramento confirmado.
-              </p>
-            )}
-            <div className="actions">
-              <button
-                disabled={!canAct || state?.assistanceStatus !== "PENDING"}
-                onClick={() => command("ACK_HELP")}
-              >
-                Reconhecer
-              </button>
-              <button
-                className="secondary"
-                disabled={!canAct || state?.assistanceStatus !== "ACKNOWLEDGED"}
-                onClick={() => command("CLOSE_HELP")}
-              >
-                Encerrar
-              </button>
-            </div>
-            {state?.requestId && !state.clockValid && (
-              <p className="hint">
-                Aguarde NTP e use “hora real” no monitor serial para habilitar
-                comandos.
-              </p>
-            )}
-            {busy && (
-              <p className="hint">
-                Aguardando resultado ou atualização do estado. Sem resposta em
-                10 s, o resultado fica não confirmado.
-              </p>
-            )}
-            <div className="command-list">
-              {snapshot?.commands.slice(0, 5).map((c) => (
-                <div key={c.command_id}>
-                  <strong>
-                    {names[c.action]} ·{" "}
-                    {c.status === "PENDING"
-                      ? "Enviado"
-                      : (names[c.status] ?? c.status)}
-                  </strong>
-                  <small>
-                    {c.command_id}
-                    {c.reason ? ` · ${c.reason}` : ""}
-                  </small>
-                </div>
-              ))}
-            </div>
-          </section>
-          <section className="card">
-            <p className="eyebrow">ILUMINAÇÃO E AGENDA</p>
-            <h2>Configurar ambiente</h2>
-            <form onSubmit={save}>
-              <label>
-                Modo
-                <select
-                  value={form.mode}
-                  onChange={(e) =>
-                    change("mode", e.target.value as Settings["mode"])
-                  }
-                >
-                  <option value="AUTO">Automático</option>
-                  <option value="ON">Ligado</option>
-                  <option value="OFF">Desligado</option>
-                </select>
-              </label>
-              <div className="fields">
-                <label>
-                  Brilho (%)
-                  <input
-                    type="number"
-                    min="1"
-                    max="100"
-                    required
-                    value={form.brightnessPct}
-                    onChange={(e) =>
-                      change("brightnessPct", Number(e.target.value))
-                    }
-                  />
-                </label>
-                <label>
-                  Prazo após movimento (s)
-                  <input
-                    type="number"
-                    min="1"
-                    max="600"
-                    required
-                    value={form.offDelaySec}
-                    onChange={(e) =>
-                      change("offDelaySec", Number(e.target.value))
-                    }
-                  />
-                </label>
-                <label>
-                  Início da agenda
-                  <input
-                    type="time"
-                    required
-                    value={form.startTime}
-                    onChange={(e) => change("startTime", e.target.value)}
-                  />
-                </label>
-                <label>
-                  Fim da agenda
-                  <input
-                    type="time"
-                    required
-                    value={form.endTime}
-                    onChange={(e) => change("endTime", e.target.value)}
-                  />
-                </label>
-              </div>
-              <p className="hint">
-                São Paulo · UTC−3. Horários iguais habilitam 24 h. O botão de
-                ajuda funciona a qualquer hora.
-              </p>
-              <button disabled={saving || !connected}>
-                {saving ? "Enviando…" : "Enviar configuração"}
-              </button>
-              {dirty && (
-                <span className="edit-label"> Alterações não enviadas</span>
-              )}
-            </form>
-            <div className="config-status">
-              <p>
-                Desejada:{" "}
-                {snapshot?.configs[0]
-                  ? `v${snapshot.configs[0].config_version} · ${snapshot.configs[0].status === "PENDING" ? "Aguardando confirmação" : names[snapshot.configs[0].status]}`
-                  : "nenhuma configuração remota"}
-              </p>
-              {snapshot?.configs[0] && (
-                <p className="hint">
-                  Desejada: {names[snapshot.configs[0].payload.mode]} ·{" "}
-                  {snapshot.configs[0].payload.brightnessPct}% ·{" "}
-                  {snapshot.configs[0].payload.offDelaySec} s ·{" "}
-                  {snapshot.configs[0].payload.startTime}–
-                  {snapshot.configs[0].payload.endTime}
-                </p>
-              )}
-              <p>
-                Versão aplicada pelo ESP32: {state?.appliedConfigVersion ?? "—"}
-              </p>
-              {snapshot?.configs[0]?.reason && (
-                <small>{snapshot.configs[0].reason}</small>
-              )}
-              <p className="hint">
-                Os cartões mostram a saída atual. Alterações seriais podem
-                diferir da última configuração remota.
-              </p>
-            </div>
-          </section>
-        </div>
-        <section className="card history">
-          <div className="history-heading">
+              <Icon name="help" />
+              {activeRequest && <span className="indicator-dot" />}
+            </a>
+            <span className="topbar-divider" />
+            <button
+              className={`sound-button ${sound ? "enabled" : ""}`}
+              onClick={toggleSound}
+              aria-pressed={sound}
+              aria-label={
+                sound ? "Desativar aviso sonoro" : "Ativar aviso sonoro"
+              }
+              title={sound ? "Desativar aviso sonoro" : "Ativar aviso sonoro"}
+            >
+              <Icon name={sound ? "sound" : "muted"} />
+              <span>{sound ? "Som ativado" : "Ativar som"}</span>
+            </button>
+          </div>
+        </header>
+        <main id="page-content" tabIndex={-1}>
+          <div className="page-heading">
             <div>
-              <p className="eyebrow">REGISTROS DO DISPOSITIVO</p>
-              <h2>Histórico de eventos</h2>
+              <p className="eyebrow">
+                {page === "dashboard"
+                  ? "VISÃO GERAL"
+                  : currentPage.label.toLocaleUpperCase("pt-BR")}
+              </p>
+              <h1>{currentPage.title}</h1>
+              <p>{currentPage.description}</p>
             </div>
-            <span>Até 100 registros · período pelo recebimento</span>
+            <div className="environment-status">
+              <StatusBadge online={online}>
+                {online ? "Ambiente conectado" : "Aguardando conexão"}
+              </StatusBadge>
+              <span>
+                Última comunicação: {date(snapshot?.device.lastSeen ?? null)}
+              </span>
+            </div>
           </div>
-          <div className="filters">
-            <label>
-              Tipo
-              <select
-                value={filter.type}
-                onChange={(e) =>
-                  setFilter((f) => ({ ...f, type: e.target.value }))
-                }
-              >
-                <option value="">Todos os eventos</option>
-                {Object.entries(eventNames).map(([key, label]) => (
-                  <option key={key} value={key}>
-                    {label}
-                  </option>
-                ))}
-              </select>
-            </label>
-            <label>
-              De
-              <input
-                type="datetime-local"
-                value={filter.from}
-                onChange={(e) =>
-                  setFilter((f) => ({ ...f, from: e.target.value }))
-                }
-              />
-            </label>
-            <label>
-              Até
-              <input
-                type="datetime-local"
-                value={filter.to}
-                onChange={(e) =>
-                  setFilter((f) => ({ ...f, to: e.target.value }))
-                }
-              />
-            </label>
-          </div>
-          {historyError && (
+          {demo === false && (
+            <form
+              className="login card"
+              onSubmit={(e) => {
+                e.preventDefault();
+                setToken(tokenInput);
+              }}
+            >
+              <label>
+                Token da API
+                <input
+                  type="password"
+                  value={tokenInput}
+                  onChange={(e) => setTokenInput(e.target.value)}
+                  autoComplete="off"
+                  required
+                />
+              </label>
+              <button>Conectar</button>
+            </form>
+          )}
+          {error && (
             <p role="alert" className="error">
-              {historyError}
+              {error}
             </p>
           )}
-          <div className="table-scroll">
-            <table>
-              <thead>
-                <tr>
-                  <th>Recebido em</th>
-                  <th>Evento</th>
-                  <th>Chamado</th>
-                  <th>Horário no ESP32</th>
-                </tr>
-              </thead>
-              <tbody>
-                {events.map((e) => (
-                  <tr key={e.event_id}>
-                    <td>{date(e.received_at)}</td>
-                    <td>{eventNames[e.type] ?? e.type}</td>
-                    <td className="request">{e.request_id ?? "—"}</td>
-                    <td>{date(e.occurred_at)}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-          {!events.length && (
-            <p className="empty">
-              Nenhum evento neste período. Inicie a simulação e acione o PIR ou
-              o botão.
+          {notice && (
+            <div role="status" className="notice dismissible">
+              <span>{notice}</span>
+              <button
+                className="icon-button"
+                aria-label="Dispensar mensagem"
+                onClick={() => setNotice("")}
+              >
+                <Icon name="close" />
+              </button>
+            </div>
+          )}
+          {!connected && (
+            <p role="alert" className="notice">
+              {demo === null
+                ? "Conectando ao ambiente…"
+                : "Painel sem atualização ao vivo. Os valores exibidos correspondem à última informação recebida."}
             </p>
           )}
-        </section>
-        <footer>
-          Sistema acadêmico de apoio. Avisos remotos dependem da conexão e do
-          painel aberto.
-          {demo && " Broker público: use somente dados fictícios."}
-        </footer>
-      </main>
-    </>
+          {activeRequest && page !== "assistencia" && (
+            <a className="assistance-banner" href="#assistencia">
+              <span className="banner-icon">
+                <Icon name="help" />
+              </span>
+              <div>
+                <strong>
+                  {state?.assistanceStatus === "PENDING"
+                    ? "Um pedido de ajuda precisa de atenção."
+                    : "Há um atendimento em andamento."}
+                </strong>
+                <span>
+                  {online
+                    ? "Acompanhe o chamado e confirme as ações na tela de Assistência."
+                    : "Último chamado conhecido. Aguarde a reconexão para confirmar novas ações."}
+                </span>
+              </div>
+              <Icon name="arrow" />
+            </a>
+          )}
+          {page === "dashboard" && (
+            <DashboardView snapshot={snapshot} connected={connected} />
+          )}
+          {page === "iluminacao" && (
+            <LightingView
+              snapshot={snapshot}
+              connected={connected}
+              form={form}
+              dirty={dirty}
+              saving={saving}
+              change={change}
+              save={save}
+            />
+          )}
+          {page === "assistencia" && (
+            <AssistanceView
+              snapshot={snapshot}
+              connected={connected}
+              wait={wait}
+              canAct={!!canAct}
+              busy={!!busy}
+              command={command}
+            />
+          )}
+          {page === "administracao" && (
+            <AdminView
+              snapshot={snapshot}
+              connected={connected}
+              events={events}
+              filter={filter}
+              setFilter={setFilter}
+              historyError={historyError}
+              demo={demo}
+            />
+          )}
+          <footer>
+            <span className="footer-brand">NightCare</span>
+            <span>
+              Apoio ao deslocamento noturno{" "}
+              <span className="footer-separator">·</span> Avisos remotos
+              dependem da conexão e do painel aberto.
+            </span>
+          </footer>
+        </main>
+      </div>
+    </div>
   );
 }
 createRoot(document.getElementById("root")!).render(<App />);
