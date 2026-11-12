@@ -8,7 +8,7 @@ const ca=readFileSync(root+'/secrets/mosquitto/ca.crt');
 const password=readFileSync(root+'/Wokwi/mqtt_secrets.h','utf8').match(/#define MQTT_PASSWORD "([^"]+)"/)[1];
 const prefix='nightcare/nightcare-001/';const base={schemaVersion:1,deviceId:'nightcare-001'};
 const options={ca,rejectUnauthorized:true,reconnectPeriod:0,connectTimeout:3000,protocolVersion:5};
-const api=async(path,body)=>{const response=await fetch('http://backend:3000/api/'+path,{headers:{Authorization:'Bearer '+env.API_TOKEN,'Content-Type':'application/json'},method:body?'POST':'GET',body:body?JSON.stringify(body):undefined});assert.ok(response.ok,`API ${path}: ${response.status} ${await (!response.ok?response.text():Promise.resolve(''))}`);return response.json();};
+const api=async(path,body)=>{const response=await fetch('http://backend:3000/api/'+path,{headers:{'Content-Type':'application/json'},method:body?'POST':'GET',body:body?JSON.stringify(body):undefined});assert.ok(response.ok,`API ${path}: ${response.status} ${await (!response.ok?response.text():Promise.resolve(''))}`);return response.json();};
 async function until(fn,message){for(let i=0;i<60;i++){if(await fn())return;await new Promise(r=>setTimeout(r,100));}throw Error(message);}
 function waitMessage(client,suffix){return new Promise((resolve,reject)=>{const timeout=setTimeout(()=>{client.off('message',handler);reject(Error('missing '+suffix));},5000);const handler=(t,p,packet)=>{if(t!==prefix+suffix)return;clearTimeout(timeout);client.off('message',handler);resolve({payload:JSON.parse(p.toString()),retained:packet.retain});};client.on('message',handler);});}
 if(process.argv[2]==='persistence'){

@@ -120,10 +120,17 @@ export function Sidebar({
   const ref = useRef<HTMLElement>(null);
   useEffect(() => {
     if (!mobileOpen) return;
-    const previous = document.activeElement as HTMLElement | null;
+    // Making the main content inert can already have blurred the trigger before
+    // this effect runs. Restore the explicit trigger when closing the dialog.
+    const previous = document.querySelector<HTMLButtonElement>(".menu-toggle");
     const previousOverflow = document.body.style.overflow;
     document.body.style.overflow = "hidden";
-    ref.current?.querySelector<HTMLButtonElement>(".mobile-close")?.focus();
+    let focusFrame = requestAnimationFrame(() => {
+      // Wait for the visibility transition and inert blur to reach the browser.
+      focusFrame = requestAnimationFrame(() => {
+        ref.current?.querySelector<HTMLButtonElement>(".mobile-close")?.focus();
+      });
+    });
     function keydown(e: KeyboardEvent) {
       if (e.key === "Escape") {
         e.preventDefault();
@@ -135,7 +142,10 @@ export function Sidebar({
       ).filter((el) => el.getClientRects().length > 0);
       const first = items[0],
         last = items.at(-1);
-      if (e.shiftKey && document.activeElement === first) {
+      if (!ref.current?.contains(document.activeElement)) {
+        e.preventDefault();
+        first?.focus();
+      } else if (e.shiftKey && document.activeElement === first) {
         e.preventDefault();
         last?.focus();
       } else if (!e.shiftKey && document.activeElement === last) {
@@ -145,6 +155,7 @@ export function Sidebar({
     }
     document.addEventListener("keydown", keydown);
     return () => {
+      cancelAnimationFrame(focusFrame);
       document.body.style.overflow = previousOverflow;
       document.removeEventListener("keydown", keydown);
       previous?.focus();

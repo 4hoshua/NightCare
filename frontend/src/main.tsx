@@ -2,7 +2,8 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { createRoot } from "react-dom/client";
 import {
   defaults,
-  errorNames,
+  api,
+  newId,
   date,
   type Settings,
   type Snapshot,
@@ -16,6 +17,7 @@ import {
   AdminView,
   StatusBadge,
 } from "./views";
+import { ArchiveLists, useRecords } from "./records";
 import "./style.css";
 function App() {
   const [page, setPage] = useState(readPage);
@@ -46,9 +48,7 @@ function App() {
     document.title = `${pages.find((p) => p.id === page)!.label} · NightCare`;
     window.scrollTo(0, 0);
   }, [page]);
-  const [demo, setDemo] = useState<boolean | null>(null),
-    [token, setToken] = useState(""),
-    [tokenInput, setTokenInput] = useState("");
+  const [demo, setDemo] = useState<boolean | null>(null);
   const [snapshot, setSnapshot] = useState<Snapshot | null>(null),
     [connected, setConnected] = useState(false),
     [error, setError] = useState("");
@@ -57,9 +57,25 @@ function App() {
     [saving, setSaving] = useState(false),
     [sending, setSending] = useState(false),
     [notice, setNotice] = useState("");
-  const [events, setEvents] = useState<EventRow[]>([]),
-    [filter, setFilter] = useState({ type: "", from: "", to: "" }),
-    [historyError, setHistoryError] = useState("");
+  const [filter, setFilter] = useState({ type: "", from: "", to: "" });
+  const historyQuery = (() => {
+    if (filter.from && filter.to && filter.from > filter.to) return null;
+    const params = new URLSearchParams();
+    if (filter.type) params.set("type", filter.type);
+    if (filter.from) params.set("from", new Date(filter.from).toISOString());
+    if (filter.to) params.set("to", new Date(filter.to).toISOString());
+    return params.toString();
+  })();
+  const historyRecords = useRecords<EventRow>(
+    "events",
+    historyQuery,
+    `${snapshot?.eventCount}:${connected}`,
+  );
+  const events = historyRecords.items;
+  const historyError =
+    historyQuery === null
+      ? "O início deve ser anterior ao fim."
+      : historyRecords.error;
   const [sound, setSound] = useState(false),
     [now, setNow] = useState(Date.now());
   const audio = useRef<AudioContext | null>(null),
@@ -74,25 +90,7 @@ function App() {
     const t = setInterval(() => setNow(Date.now()), 1000);
     return () => clearInterval(t);
   }, []);
-  async function api(path: string, body?: unknown, signal?: AbortSignal) {
-    const r = await fetch(path, {
-      method: body ? "POST" : "GET",
-      headers: {
-        ...(demo ? {} : { Authorization: `Bearer ${token}` }),
-        ...(body ? { "Content-Type": "application/json" } : {}),
-      },
-      body: body ? JSON.stringify(body) : undefined,
-      signal,
-    });
-    const data = await r.json();
-    if (!r.ok)
-      throw new Error(
-        errorNames[data.error] ?? data.error ?? "Falha na solicitação.",
-      );
-    return data;
-  }
   useEffect(() => {
-    if (demo === null || (!demo && !token)) return;
     let active = true,
       socket: WebSocket | undefined,
       retry: ReturnType<typeof setTimeout> | undefined;
@@ -100,9 +98,6 @@ function App() {
       socket = new WebSocket(
         `${location.protocol === "https:" ? "wss" : "ws"}://${location.host}/ws`,
       );
-      socket.onopen = () => {
-        if (!demo) socket?.send(JSON.stringify({ type: "auth", token }));
-      };
       socket.onmessage = (e) => {
         try {
           const message = JSON.parse(e.data);
@@ -118,10 +113,6 @@ function App() {
       socket.onclose = (e) => {
         if (!active) return;
         setConnected(false);
-        if (e.code === 1008) {
-          setError("Token inválido ou não informado.");
-          return;
-        }
         retry = setTimeout(connect, 2000);
       };
       socket.onerror = () => socket?.close();
@@ -132,41 +123,13 @@ function App() {
       clearTimeout(retry);
       socket?.close();
     };
-  }, [demo, token]);
+  }, []);
   useEffect(() => {
     if (!snapshot || initialized.current) return;
     const desired = snapshot.configs[0]?.payload;
     if (desired) setForm({ ...defaults, ...desired });
     initialized.current = true;
   }, [snapshot]);
-  useEffect(() => {
-    if (demo === null || (!demo && !token) || !snapshot) return;
-    const abort = new AbortController();
-    async function load() {
-      try {
-        if (filter.from && filter.to && filter.from > filter.to)
-          throw new Error("O início deve ser anterior ao fim.");
-        const params = new URLSearchParams({ limit: "100" });
-        if (filter.type) params.set("type", filter.type);
-        if (filter.from)
-          params.set("from", new Date(filter.from).toISOString());
-        if (filter.to) params.set("to", new Date(filter.to).toISOString());
-        const result = await api(
-          "/api/events?" + params,
-          undefined,
-          abort.signal,
-        );
-        if (!abort.signal.aborted) {
-          setEvents(result);
-          setHistoryError("");
-        }
-      } catch (e) {
-        if (!abort.signal.aborted) setHistoryError((e as Error).message);
-      }
-    }
-    void load();
-    return () => abort.abort();
-  }, [demo, token, snapshot?.eventCount, connected, filter]);
   statusRef.current = !!connected && state?.assistanceStatus === "PENDING";
   useEffect(() => {
     if (!sound) return;
@@ -205,9 +168,9 @@ function App() {
       setError("O navegador não permitiu o áudio.");
     }
   }
-  const request = snapshot?.requests.find(
-    (r) => r.request_id === state?.requestId,
-  );
+  const request =
+    snapshot?.activeRequest ??
+    snapshot?.requests.find((r) => r.request_id === state?.requestId);
   const wait = request?.opened_at
     ? Math.max(0, Math.floor((now - request.opened_at) / 1000))
     : null;
@@ -217,7 +180,7 @@ function App() {
     (c) =>
       c.request_id === state?.requestId &&
       c.action === action &&
-      c.status !== "REJECTED" &&
+      (c.status === "PENDING" || c.status === "UNCONFIRMED") &&
       c.expires_at > now,
   );
   const canAct =
@@ -226,12 +189,22 @@ function App() {
     state?.clockValid &&
     !sending &&
     !busy;
+  const editRevision = useRef(0);
+  const configFlight = useRef(false);
+  const desiredRef = useRef<Settings | null>(null);
+  useEffect(() => {
+    desiredRef.current = snapshot?.configs[0]?.payload ?? null;
+  }, [snapshot?.configs[0]?.config_version]);
   function change<K extends keyof Settings>(key: K, value: Settings[K]) {
+    editRevision.current++;
     setForm((f) => ({ ...f, [key]: value }));
     setDirty(true);
   }
   async function save(e: React.FormEvent) {
     e.preventDefault();
+    if (configFlight.current) return;
+    configFlight.current = true;
+    const revision = editRevision.current;
     setSaving(true);
     setError("");
     try {
@@ -244,13 +217,45 @@ function App() {
         timezone: form.timezone,
       };
       const result = await api("/api/config", payload);
-      setDirty(false);
+      desiredRef.current = payload;
+      if (revision === editRevision.current) setDirty(false);
       setNotice(
         `Versão ${result.configVersion} enviada. Aguarde confirmação do ESP32.`,
       );
     } catch (e) {
       setError((e as Error).message);
     } finally {
+      configFlight.current = false;
+      setSaving(false);
+    }
+  }
+  async function quickMode(mode: Settings["mode"]) {
+    if (configFlight.current || !connected) return;
+    configFlight.current = true;
+    setSaving(true);
+    setError("");
+    // Use the latest persisted intent, never the unsent draft.
+    const latest = desiredRef.current ?? snapshot?.configs[0]?.payload;
+    const base = latest ?? defaults;
+    const payload: Settings = {
+      mode,
+      brightnessPct: base.brightnessPct,
+      offDelaySec: base.offDelaySec,
+      startTime: base.startTime,
+      endTime: base.endTime,
+      timezone: base.timezone,
+    };
+    try {
+      const result = await api("/api/config", payload);
+      desiredRef.current = payload;
+      setForm((f) => ({ ...f, mode }));
+      setNotice(
+        `Modo enviado na versão ${result.configVersion}. Aguarde confirmação do ESP32.`,
+      );
+    } catch (e) {
+      setError((e as Error).message);
+    } finally {
+      configFlight.current = false;
       setSaving(false);
     }
   }
@@ -260,7 +265,7 @@ function App() {
     setError("");
     try {
       await api("/api/commands", {
-        commandId: crypto.randomUUID(),
+        commandId: newId(),
         requestId: state.requestId,
         action: selected,
       });
@@ -359,27 +364,6 @@ function App() {
               </span>
             </div>
           </div>
-          {demo === false && (
-            <form
-              className="login card"
-              onSubmit={(e) => {
-                e.preventDefault();
-                setToken(tokenInput);
-              }}
-            >
-              <label>
-                Token da API
-                <input
-                  type="password"
-                  value={tokenInput}
-                  onChange={(e) => setTokenInput(e.target.value)}
-                  autoComplete="off"
-                  required
-                />
-              </label>
-              <button>Conectar</button>
-            </form>
-          )}
           {error && (
             <p role="alert" className="error">
               {error}
@@ -436,6 +420,7 @@ function App() {
               saving={saving}
               change={change}
               save={save}
+              quickMode={quickMode}
             />
           )}
           {page === "assistencia" && (
@@ -448,7 +433,7 @@ function App() {
               command={command}
             />
           )}
-          {page === "administracao" && (
+          <div hidden={page !== "administracao"}>
             <AdminView
               snapshot={snapshot}
               connected={connected}
@@ -457,8 +442,10 @@ function App() {
               setFilter={setFilter}
               historyError={historyError}
               demo={demo}
+              historyRecords={historyRecords}
             />
-          )}
+            <ArchiveLists snapshot={snapshot} connected={connected} />
+          </div>
           <footer>
             <span className="footer-brand">NightCare</span>
             <span>

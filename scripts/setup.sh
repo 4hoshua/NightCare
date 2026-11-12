@@ -22,10 +22,10 @@ openssl x509 -req -in secrets/ca/server.csr -CA secrets/mosquitto/ca.crt -CAkey 
 python3 - "$host" <<'PYSETUP'
 import pathlib,secrets,sys
 root=pathlib.Path('.')
-device,backend,health,api=[secrets.token_hex(32) for _ in range(4)]
+device,backend,health=[secrets.token_hex(32) for _ in range(3)]
 (root/'secrets/mosquitto/passwords').write_text(f'nightcare-001:{device}\nnightcare-backend:{backend}\nnightcare-health:{health}\n')
 (root/'secrets/mosquitto/health-password').write_text(health)
-(root/'.env').write_text(f'MQTT_HOST={sys.argv[1]}\nMQTT_BACKEND_PASSWORD={backend}\nAPI_TOKEN={api}\n')
+(root/'.env').write_text(f'MQTT_HOST={sys.argv[1]}\nMQTT_BACKEND_PASSWORD={backend}\n')
 ca=(root/'secrets/mosquitto/ca.crt').read_text()
 (root/'Wokwi/mqtt_secrets.h').write_text('#pragma once\n#define MQTT_HOST "'+sys.argv[1]+'"\n#define MQTT_USER "nightcare-001"\n#define MQTT_PASSWORD "'+device+'"\nstatic const char MQTT_CA[] = R"CA('+ca+')CA";\n')
 PYSETUP

@@ -7,6 +7,8 @@ import {
   type Snapshot,
   type EventRow,
 } from "./model";
+import type { Records } from "./records";
+import { RecordControls } from "./records";
 import { Icon, type IconName } from "./navigation";
 
 type LiveProps = { snapshot: Snapshot | null; connected: boolean };
@@ -150,11 +152,13 @@ function ConfigValues({ settings }: { settings: Settings }) {
 }
 export function ConfigurationSummary({ snapshot, connected }: LiveProps) {
   const state = snapshot?.device.state;
-  const applied = snapshot?.configs.find(
-    (c) =>
-      c.config_version === state?.appliedConfigVersion &&
-      c.status === "APPLIED",
-  );
+  const applied =
+    snapshot?.appliedConfig ??
+    snapshot?.configs.find(
+      (c) =>
+        c.config_version === state?.appliedConfigVersion &&
+        c.status === "APPLIED",
+    );
   const desired = snapshot?.configs[0];
   return (
     <section className="card configuration-summary">
@@ -179,6 +183,36 @@ export function ConfigurationSummary({ snapshot, connected }: LiveProps) {
         </div>
       </div>
       <div className="remote-config">
+        <h3>Parâmetros atuais do dispositivo</h3>
+        {state?.runtimeSettings ? (
+          <dl className="config-values">
+            <div>
+              <dt>Agenda atual</dt>
+              <dd>
+                {state.runtimeSettings.startTime}–
+                {state.runtimeSettings.endTime}
+              </dd>
+            </div>
+            <div>
+              <dt>Prazo atual sem movimento</dt>
+              <dd>{state.runtimeSettings.offDelaySec} s</dd>
+            </div>
+            <div>
+              <dt>Fuso atual</dt>
+              <dd>
+                UTC{state.runtimeSettings.timezoneOffsetHours >= 0 ? "+" : ""}
+                {state.runtimeSettings.timezoneOffsetHours}
+              </dd>
+            </div>
+          </dl>
+        ) : (
+          <p className="hint">
+            Telemetria dos parâmetros atuais indisponível. Atualize o firmware
+            para acompanhar alterações seriais.
+          </p>
+        )}
+      </div>
+      <div className="remote-config">
         <div className="config-heading">
           <h3>Configuração remota confirmada</h3>
           {state && (
@@ -190,13 +224,14 @@ export function ConfigurationSummary({ snapshot, connected }: LiveProps) {
         ) : (
           <p className="hint">
             {state?.appliedConfigVersion
-              ? "Os detalhes desta versão não estão disponíveis no histórico recente."
+              ? "Os detalhes desta versão não estão disponíveis no banco de dados."
               : "Nenhuma configuração remota confirmada disponível."}
           </p>
         )}
         <p className="hint">
           Agenda e prazo correspondem à versão remota confirmada. Alterações
-          feitas pelo serial nesses campos não são transmitidas.
+          feitas pelo serial aparecem nos parâmetros atuais quando o firmware
+          oferece essa telemetria.
         </p>
       </div>
       <div className="remote-config">
@@ -388,6 +423,7 @@ type LightingProps = LiveProps & {
   saving: boolean;
   change: <K extends keyof Settings>(key: K, value: Settings[K]) => void;
   save: (e: FormEvent) => void;
+  quickMode: (mode: Settings["mode"]) => void;
 };
 export function LightingView({
   snapshot,
@@ -397,6 +433,7 @@ export function LightingView({
   saving,
   change,
   save,
+  quickMode,
 }: LightingProps) {
   const state = snapshot?.device.state;
   return (
@@ -443,6 +480,26 @@ export function LightingView({
             </div>
             <Icon name="settings" />
           </div>
+          <fieldset className="quick-modes" disabled={saving || !connected}>
+            <legend>Troca rápida de modo</legend>
+            <div className="actions">
+              {(["AUTO", "ON", "OFF"] as const).map((mode) => (
+                <button
+                  key={mode}
+                  type="button"
+                  className={state?.mode === mode ? "" : "secondary"}
+                  aria-pressed={state?.mode === mode}
+                  onClick={() => quickMode(mode)}
+                >
+                  {names[mode]}
+                </button>
+              ))}
+            </div>
+            <p className="hint">
+              Envia somente a mudança de modo com os últimos parâmetros
+              enviados. Edições abaixo são preservadas.
+            </p>
+          </fieldset>
           <form onSubmit={save}>
             <label>
               Modo
@@ -551,6 +608,10 @@ export function AssistanceView({
         <Freshness snapshot={snapshot} connected={connected} />
         {state?.requestId ? (
           <>
+            <p>
+              Acionamentos do botão AJUDA: <strong>{state.pressCount}</strong>
+            </p>
+            <p className="mono">{state.requestId}</p>
             <div className="wait-time">
               <span>Tempo desde a abertura</span>
               <strong>
@@ -650,6 +711,7 @@ type AdminProps = LiveProps & {
   setFilter: Dispatch<SetStateAction<HistoryFilter>>;
   historyError: string;
   demo: boolean | null;
+  historyRecords: Records<EventRow>;
 };
 export function AdminView({
   snapshot,
@@ -659,6 +721,7 @@ export function AdminView({
   setFilter,
   historyError,
   demo,
+  historyRecords,
 }: AdminProps) {
   const state = snapshot?.device.state;
   return (
@@ -717,6 +780,22 @@ export function AdminView({
               </dd>
             </div>
             <div>
+              <dt>Inicialização (boot)</dt>
+              <dd className="mono">{state?.bootId ?? "—"}</dd>
+            </div>
+            <div>
+              <dt>Tempo em execução no último estado</dt>
+              <dd>{state ? `${Math.floor(state.uptimeMs / 1000)} s` : "—"}</dd>
+            </div>
+            <div>
+              <dt>Sequência do estado</dt>
+              <dd>{state?.sequence ?? "—"}</dd>
+            </div>
+            <div>
+              <dt>Acionamentos do botão AJUDA</dt>
+              <dd>{state?.pressCount ?? "—"}</dd>
+            </div>
+            <div>
               <dt>Eventos descartados</dt>
               <dd>{state?.droppedEvents ?? "—"}</dd>
             </div>
@@ -763,7 +842,7 @@ export function AdminView({
             <p className="eyebrow">REGISTROS DO DISPOSITIVO</p>
             <h2>Histórico de eventos</h2>
           </div>
-          <span>Até 100 registros · período pelo recebimento</span>
+          <span>100 registros por página · período pelo recebimento</span>
         </div>
         <div className="filters">
           <label>
@@ -814,6 +893,7 @@ export function AdminView({
                 <th>Evento</th>
                 <th>Chamado</th>
                 <th>Horário no ESP32</th>
+                <th>Detalhes do evento</th>
               </tr>
             </thead>
             <tbody>
@@ -823,11 +903,27 @@ export function AdminView({
                   <td>{eventNames[e.type] ?? e.type}</td>
                   <td className="request">{e.request_id ?? "—"}</td>
                   <td>{date(e.occurred_at)}</td>
+                  <td>
+                    <details>
+                      <summary>Identificação</summary>
+                      <p className="mono">{e.event_id}</p>
+                      {e.payload && (
+                        <p>
+                          Boot: {e.payload.bootId}
+                          <br />
+                          Tempo em execução: {e.payload.uptimeMs} ms
+                          <br />
+                          Acionamentos: {e.payload.pressCount ?? "—"}
+                        </p>
+                      )}
+                    </details>
+                  </td>
                 </tr>
               ))}
             </tbody>
           </table>
         </div>
+        <RecordControls records={historyRecords} />
         {!events.length && (
           <p className="empty">
             Nenhum evento neste período. Os registros aparecerão conforme o

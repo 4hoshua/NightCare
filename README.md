@@ -6,9 +6,38 @@ MVP acadêmico de Microprocessadores e Microcontroladores para apoiar deslocamen
 
 ## Começar em poucos passos
 
-Requisitos: Docker com Compose v2, Python 3, Bash, internet e navegador. No Windows, execute os comandos em um ambiente Bash com Docker integrado. Docker Desktop precisa compartilhar a pasta do projeto. Não é necessário instalar Node para executar pelo Docker.
+Requisitos: Docker com Compose v2, Python 3, Bash, internet e navegador. Docker Desktop precisa ter acesso à pasta do projeto. Não é necessário instalar Node para executar pelo Docker.
 
-Na raiz do projeto:
+### Preparar o Windows (Docker Desktop e Git Bash)
+
+1. Baixe o [Docker Desktop para Windows](https://docs.docker.com/desktop/setup/install/windows-install/) e execute o instalador. Use o backend **WSL 2** e contêineres **Linux**. Se o WSL ainda não estiver instalado, abra o **PowerShell como administrador**, execute `wsl --install` e reinicie o computador. A virtualização precisa estar habilitada na BIOS/UEFI; confira os requisitos do Windows na página oficial.
+2. Abra o **Docker Desktop** pelo menu Iniciar e aguarde o mecanismo Docker ficar em execução. Mantenha o aplicativo aberto durante a demonstração; ele já inclui o Compose v2.
+3. Baixe e instale o [Git for Windows](https://git-scm.com/install/windows), que inclui o **Git Bash**. Mantenha os componentes padrão, incluindo a integração com o Explorador de Arquivos. Após instalar, abra **Git Bash** pelo menu Iniciar ou use **Open Git Bash here** no menu de contexto da pasta `NightCare` (no Windows 11, pode estar em **Mostrar mais opções**).
+4. Instale também o [Python 3 para Windows](https://www.python.org/downloads/windows/), caso ainda não tenha. Ao usar o instalador tradicional, marque **Add python.exe to PATH**. Feche e reabra o Git Bash após as instalações para atualizar o PATH.
+5. No **Git Bash**, entre na pasta do projeto e confira os requisitos. Por exemplo, para um projeto em `C:\Users\SeuNome\Downloads\NightCare`:
+
+   ```bash
+   cd "/c/Users/SeuNome/Downloads/NightCare"
+   docker info
+   docker compose version
+   python3 --version
+   ```
+
+   Substitua `SeuNome` pelo seu usuário e ajuste o caminho se necessário. `docker info` deve mostrar a seção **Server** sem erro; se falhar, confirme que o Docker Desktop terminou de iniciar.
+
+   O script exige o comando `python3`. Se ele não existir ou abrir a Microsoft Store, mas `python --version` mostrar Python 3, execute no Git Bash:
+
+   ```bash
+   python3() { python "$@"; }
+   export -f python3
+   python3 --version
+   ```
+
+   Essa adaptação vale para a sessão atual do terminal e é herdada pelo `bash scripts/demo.sh`.
+
+### Executar a demonstração
+
+Na raiz do projeto, execute no Bash (no Windows, use o **Git Bash** preparado acima):
 
 ```bash
 bash scripts/demo.sh
@@ -49,7 +78,7 @@ O ESP32 conecta a `broker.emqx.io:1883` pela internet; o backend conecta ao mesm
 | --- | --- |
 | Broker | `broker.emqx.io`, TCP `1883` |
 | Usuário e senha MQTT | vazios; serviço público sem autenticação |
-| Login/token do painel e API | dispensados com `DEMO_MODE=true` |
+| Painel, API e WebSocket | sem login ou token em ambas as modalidades |
 | Wi-Fi | `Wokwi-GUEST`, senha vazia |
 | Prefixo MQTT | `nightcare/demo/<identificador>/nightcare-001/` |
 | Identificador da instalação | 16 caracteres hexadecimais gerados em `.env.demo` |
@@ -79,8 +108,7 @@ O frontend React/TypeScript é compilado com Vite e servido pelo próprio Fastif
 | Parte | Arquivos principais |
 | --- | --- |
 | Firmware e circuito | `Wokwi/sketch.ino`, `Wokwi/diagram.json` |
-| Dashboard principal | `frontend/src/` |
-| Dashboard alternativo do remoto | `dashboard/src/`, servido em `/dashboard/` |
+| Dashboard único em `/` | `frontend/src/` (`/dashboard` e `/dashboard/` redirecionam para `/`) |
 | API, MQTT e SQLite | `backend/src/` |
 | Execução gratuita | `compose.demo.yml`, `scripts/demo.sh` |
 | Alternativa com broker próprio/TLS | `compose.yml`, `mosquitto/`, `scripts/setup.sh` |
@@ -105,13 +133,17 @@ A barra lateral pode ser expandida ou recolhida. No celular, o botão de menu ab
 | Tela | Uso |
 | --- | --- |
 | Dashboard | visão geral de conexão, luz, movimento e chamado, com atalhos de acompanhamento |
-| Iluminação e movimento | estado da luz e PIR; edição de modo, brilho, agenda e prazo |
-| Assistência | pedido ativo, tempo desde abertura, reconhecer/encerrar e resultados das últimas ações |
-| Administração | histórico por período/tipo, configuração desejada/confirmada e detalhes do dispositivo |
+| Iluminação e movimento | estado da luz e PIR; troca rápida de modo; edição de modo, brilho, agenda e prazo |
+| Assistência | pedido ativo, acionamentos do botão, tempo desde abertura, reconhecer/encerrar e resultados das últimas ações |
+| Administração | eventos por período/tipo; históricos paginados de chamados, comandos e configurações; parâmetros atuais e diagnósticos |
 
 O indicador de chamado e o controle de som ficam disponíveis em todas as telas. Trocar de tela preserva o formulário em edição, os filtros, o áudio habilitado e a conexão em tempo real. Administração organiza as informações existentes; não cria um perfil de acesso separado.
 
-Modo e brilho atuais vêm do estado do ESP32. Agenda e prazo exibidos como configuração remota confirmada vêm da versão aplicada informada pelo dispositivo; não representam alterações seriais posteriores nesses campos. Se os detalhes dessa versão não estiverem disponíveis, o painel informa a ausência, sem usar uma configuração desejada pendente como se estivesse aplicada. Offline, os dados são identificados como última informação recebida.
+Modo e brilho atuais vêm do estado do ESP32. O firmware atualizado também publica agenda, prazo e offset UTC efetivamente ativos em `runtimeSettings`, incluindo alterações pelo serial. O painel separa esses parâmetros da configuração remota confirmada e da última configuração enviada. Firmware anterior continua aceito: nesse caso o painel informa a ausência dessa telemetria. A versão confirmada é consultada diretamente no banco, mesmo fora das 30 configurações recentes. Offline, os dados são identificados como última informação recebida.
+
+Os botões **Automático / Ligado / Desligado** enviam uma configuração completa baseada nos últimos parâmetros enviados, alterando apenas o modo dessa intenção. Sem envio anterior, usam os padrões do firmware. As demais edições ainda não enviadas permanecem no formulário e não são publicadas por esses botões. A confirmação continua dependendo do ESP32.
+
+Administração permite **Carregar mais** em eventos, chamados, comandos e configurações, em páginas de 100 registros. Ao consultar páginas antigas, atualizações ao vivo preservam a consulta; **Atualizar consulta** retorna aos registros mais recentes. Eventos têm filtros por tipo/período e detalhes de identificação. Chamados mostram abertura e acionamentos; comandos mostram resultado, motivo e validade; configurações mostram versões e parâmetros. Boot, sequência, tempo em execução, persistência e perdas aparecem nos diagnósticos. Esses valores refletem a última telemetria recebida, não estimativas do navegador.
 
 ## Circuito e controle local
 
@@ -175,7 +207,7 @@ pio run -e esp32dev
 
 O ambiente fixa `espressif32@6.12.0`, Arduino ESP32 2.0.17 e ArduinoJson 7.4.2. O pacote gerado inclui `wokwi.toml` com o binário demo para uso opcional da extensão VS Code; o caminho principal é o navegador gratuito. A variante ESP-IDF 5 do código não está validada.
 
-O [roteiro de testes manuais](docs/VALIDACAO.md) apresenta dois percursos: comandos no terminal do ESP32 e operação dos painéis com sensores e botão. Cada teste inclui uma condição anormal, o tratamento esperado e instruções para restaurar o ambiente. Compilação e cliente MQTT não substituem testes do circuito no Wokwi.
+A [auditoria e o roteiro completo de validação](docs/VALIDACAO.md) relacionam capacidades, acesso, cenários normais/anormais e pendências. Cobrem comandos seriais, circuito, interface, API, MQTT, persistência, falhas e operação. Cada teste inclui resultados esperados e restauração. Compilação e cliente MQTT não substituem testes do circuito no Wokwi.
 
 ## API e tópicos MQTT
 
@@ -194,8 +226,10 @@ curl -fsS -X POST http://localhost:3000/api/config \
 | `GET /health/live` | processo HTTP ativo |
 | `GET /health/ready` | SQLite e conexão MQTT; 503 sem broker |
 | `GET /ui-config` | informa se o modo demo está ativo |
-| `GET /api/status` | dispositivo, configurações, chamados, comandos e contador de eventos |
-| `GET /api/events?limit=100&type=...&from=...&to=...` | histórico; datas ISO UTC, limite 1–500 |
+| `GET /api/status` | dispositivo, configuração aplicada/chamado ativo consultados diretamente, listas recentes e contador de eventos |
+| `GET /api/events?limit=100&type=...&from=...&to=...` | histórico em array; datas ISO UTC, limite 1–500 |
+| `GET /api/events?page=true&limit=100&cursor=...` | eventos paginados; aceita os mesmos filtros |
+| `GET /api/requests`, `/api/commands`, `/api/configs` | históricos paginados; `limit` e `cursor` opcionais |
 | `POST /api/config` | configuração completa; backend atribui versão crescente |
 | `POST /api/commands` | `commandId`, `requestId`, `action: ACK_HELP ou CLOSE_HELP` |
 | `GET /api/commands/:id` | resultado da intenção |
@@ -210,7 +244,9 @@ curl -fsS -X POST http://localhost:3000/api/commands \
 curl -fsS http://localhost:3000/api/commands/demo-ack-001
 ```
 
-Aguarde `APPLIED` e `ACKNOWLEDGED` no estado; depois envie `CLOSE_HELP` com outro commandId. HTTP 400 indica entrada inválida; 409 indica conflito, offline, relógio inválido ou transição incompatível. Na modalidade TLS, `/api/` exige `Authorization: Bearer TOKEN`, e `/ws` exige mensagem inicial `{type:"auth",token:"..."}`; o painel oferece campo para esse token, mantido apenas em memória.
+Aguarde `APPLIED` e `ACKNOWLEDGED` no estado; depois envie `CLOSE_HELP` com outro commandId. HTTP 400 indica entrada inválida; 409 indica conflito, offline, relógio inválido ou transição incompatível. Painel, API e WebSocket não exigem login, token nem mensagem de autenticação, inclusive na modalidade com MQTT TLS. `API_TOKEN` de uma configuração antiga é ignorado; não é necessário regenerar credenciais nem apagar volumes. A API continua publicada apenas em `127.0.0.1` pelo Compose.
+
+Consultas paginadas retornam `{items,nextCursor}`. Quando `nextCursor` for diferente de `null`, envie-o como `cursor` preservando os filtros. A ordenação é decrescente por recebimento/ID nos eventos, abertura/ID nos chamados, criação/ID nos comandos e versão nas configurações. As coleções de chamados, comandos e configurações sempre usam esse formato; eventos sem `page=true` e sem cursor preservam o array anterior. Cursor inválido, cursor de outra coleção/filtros e período invertido retornam HTTP 400. A paginação não congela resultados: novas inserções e alterações podem ocorrer durante a leitura; use Atualizar consulta para recuperar o estado recente.
 
 Todos os tópicos abaixo usam o prefixo da instalação. Payloads preservam `schemaVersion:1` e `deviceId:"nightcare-001"`.
 
@@ -223,7 +259,7 @@ Todos os tópicos abaixo usam o prefixo da instalação. Payloads preservam `sch
 | `commands` | backend → ESP32 | 1 | não |
 | `acks` | ESP32 → backend | 1 | não |
 
-Eventos têm eventId exclusivo por dispositivo/boot/contador, tipo, uptime, requestId quando aplicável e horário UTC ou `null`. SQLite deduplica pelo eventId. O estado inclui sequência, modo, luz, brilho, movimento, assistência, relógio, versão aplicada, perdas e persistência. Configurações inválidas ou antigas são rejeitadas integralmente; repetição igual não regrava NVS. Comandos repetidos não repetem transições; pedido e resultado são gravados atomicamente na NVS com diário dos últimos 16 comandos.
+Eventos têm eventId exclusivo por dispositivo/boot/contador, tipo, uptime, requestId quando aplicável e horário UTC ou `null`. SQLite deduplica pelo eventId. O estado inclui boot, sequência, uptime, modo, luz, brilho, movimento, assistência, acionamentos, relógio, versão aplicada, perdas e persistência. Atualize primeiro o backend/interface e depois os arquivos Wokwi; um backend antigo pode rejeitar campos novos. O objeto opcional `runtimeSettings` inclui `offDelaySec`, `startTime`, `endTime` e `timezoneOffsetHours` (−12..+14). Configurações inválidas ou antigas são rejeitadas integralmente; repetição igual não regrava NVS. Comandos repetidos não repetem transições; pedido e resultado são gravados atomicamente na NVS com diário dos últimos 16 comandos.
 
 ## Operação, desenvolvimento e alternativa TLS
 
@@ -246,12 +282,12 @@ bash scripts/setup.sh HOST_PUBLICO
 docker compose up --build -d
 ```
 
-Ela exige DNS/IPv4 acessível e TCP 8883; gera CA, certificado SAN para host e `mosquitto`, usuários separados e token aleatório. O script recusa sobrescrever `.env`, `secrets/` ou `mqtt_secrets.h`. Para o firmware TLS, use `Wokwi/sketch.ino`, circuito, bibliotecas e `mqtt_secrets.h`, com `#define NIGHTCARE_DEMO 0` na primeira linha para selecionar TLS explicitamente; esse caminho não usa o pacote `Wokwi/demo/`. TLS valida CA, hostname e data; não usa aceitação indiscriminada de certificados. A API permanece local e exige o token gerado; em servidor remoto, pode ser acessada por túnel SSH. Não publique credenciais reais em projetos Wokwi compartilhados.
+Ela exige DNS/IPv4 acessível e TCP 8883; gera CA, certificado SAN para host e `mosquitto`, usuários MQTT separados. O script recusa sobrescrever `.env`, `secrets/` ou `mqtt_secrets.h`. Para o firmware TLS, use `Wokwi/sketch.ino`, circuito, bibliotecas e `mqtt_secrets.h`, com `#define NIGHTCARE_DEMO 0` na primeira linha para selecionar TLS explicitamente; esse caminho não usa o pacote `Wokwi/demo/`. TLS valida CA, hostname e data; não usa aceitação indiscriminada de certificados. A API permanece local, sem autenticação HTTP; em servidor remoto, pode ser acessada por túnel SSH. TLS e ACL aqui protegem a conexão MQTT; não acrescentam HTTPS ou login ao painel. Não publique credenciais reais em projetos Wokwi compartilhados.
 
 Faça backup de SQLite com backend parado ou pela API de backup do SQLite; não ignore o WAL ao copiar um banco em uso. O projeto continua limitado a um dispositivo, UTC−3 fixo e eventos pendentes em RAM. Uma luminária física exige circuito de potência e alimentação apropriados; o LED representa essa saída na simulação.
 
-## Dashboard alternativo e ambiente Nix
+## Interface única e ambiente Nix
 
-O painel principal em `/` mantém as quatro telas, o modo gratuito e as atualizações por WebSocket. O dashboard alternativo incorporado do remoto fica em `/dashboard/`, usa consultas HTTP periódicas e solicita o token da API na modalidade TLS. No modo demo, esse formulário aceita um texto fictício, pois a API dispensa autenticação; nunca informe uma credencial real nessa modalidade. Ambos usam o mesmo backend e banco de dados.
+As contribuições funcionais de Gabriel-c0Nsp foram incorporadas em `frontend/`, preservando as quatro telas e o WebSocket. Não há segundo projeto de dashboard ou formulário de login. Links antigos `/dashboard` e `/dashboard/` redirecionam com HTTP 308 para `/`.
 
-Para desenvolver o painel alternativo separadamente, execute `npm ci` e `npm run dev` na pasta `dashboard/`; o Vite encaminha `/api` para `http://127.0.0.1:3000`. O repositório também inclui `flake.nix` e `flake.lock` para o ambiente de desenvolvimento Nix.
+O repositório mantém `flake.nix` e `flake.lock` para desenvolvimento Nix. O auxiliar `nc status` / `nc "events?limit=20"` consulta a API local sem token.

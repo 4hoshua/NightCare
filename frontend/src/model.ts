@@ -7,7 +7,17 @@ export type Settings = {
   timezone: string;
 };
 export type State = {
-  mode: string;
+  mode: "AUTO" | "ON" | "OFF";
+  bootId: string;
+  uptimeMs: number;
+  sequence: number;
+  pressCount: number;
+  runtimeSettings?: {
+    offDelaySec: number;
+    startTime: string;
+    endTime: string;
+    timezoneOffsetHours: number;
+  };
   lightOn: boolean;
   brightnessPct: number;
   motion: boolean;
@@ -28,6 +38,12 @@ export type Command = {
 };
 export type Snapshot = {
   eventCount: number;
+  appliedConfig?: Snapshot["configs"][number] | null;
+  activeRequest?: {
+    request_id: string;
+    opened_at: number | null;
+    status: string;
+  } | null;
   brokerConnected: boolean;
   device: { online: boolean; state: State | null; lastSeen: number | null };
   configs: {
@@ -40,6 +56,7 @@ export type Snapshot = {
   commands: Command[];
 };
 export type EventRow = {
+  payload?: { bootId: string; uptimeMs: number; pressCount?: number };
   event_id: string;
   type: string;
   request_id: string | null;
@@ -59,6 +76,7 @@ export const names: Record<string, string> = {
   ON: "Ligado",
   OFF: "Desligado",
   NONE: "Sem chamado",
+  CLOSED: "Encerrado",
   PENDING: "Aguardando atendimento",
   ACKNOWLEDGED: "Reconhecido",
   APPLIED: "Confirmado",
@@ -87,6 +105,27 @@ export const errorNames: Record<string, string> = {
   CLOCK_INVALID: "Aguarde NTP e retorne a hora real no ESP32.",
   REQUEST_MISMATCH: "O chamado mudou. Aguarde a atualização.",
   INVALID_TRANSITION: "A ação não corresponde ao estado atual.",
-  UNAUTHORIZED: "Token inválido.",
+  ID_CONFLICT: "Este identificador já pertence a outra intenção.",
+  INVALID_CURSOR: "A página não corresponde aos filtros. Atualize a consulta.",
+  INVALID_PERIOD: "O início deve ser anterior ao fim.",
   INVALID_PAYLOAD: "Confira os campos e seus limites.",
 };
+
+// Compatibilidade com navegadores sem randomUUID fora de contexto seguro.
+export const newId = () =>
+  globalThis.crypto?.randomUUID?.() ??
+  `${Date.now().toString(36)}-${Math.random().toString(36).slice(2)}`;
+export async function api(path: string, body?: unknown, signal?: AbortSignal) {
+  const r = await fetch(path, {
+    method: body ? "POST" : "GET",
+    headers: body ? { "Content-Type": "application/json" } : {},
+    body: body ? JSON.stringify(body) : undefined,
+    signal,
+  });
+  const data = await r.json();
+  if (!r.ok)
+    throw new Error(
+      errorNames[data.error] ?? data.error ?? "Falha na solicitação.",
+    );
+  return data;
+}

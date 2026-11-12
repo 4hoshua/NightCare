@@ -21,7 +21,7 @@ let messageError;
 device.on('message',(topic,raw)=>{void(async()=>{
  const p=JSON.parse(raw.toString());
  if(topic===prefix+'config/set'){
-  Object.assign(state,{mode:p.mode,brightnessPct:p.brightnessPct,appliedConfigVersion:p.configVersion});
+  Object.assign(state,{mode:p.mode,brightnessPct:p.brightnessPct,appliedConfigVersion:p.configVersion,runtimeSettings:{offDelaySec:p.offDelaySec,startTime:p.startTime,endTime:p.endTime,timezoneOffsetHours:-3}});
   await publish('acks',{...base,configVersion:p.configVersion,status:'APPLIED',reason:'OK'});await sendState();
  }else if(topic===prefix+'commands'){
   if(!seen.has(p.commandId)){
@@ -45,11 +45,11 @@ if(process.argv[2]==='serve'){
   await until(async()=>(await api('/api/status')).data.device.online);
   assert.equal((await api('/ui-config')).data.demo,true);
   const document=await fetch(origin);assert.equal(document.status,200);assert.match(await document.text(),/NightCare/);
-  const alternate=await fetch(origin+'/dashboard/');assert.equal(alternate.status,200);
-  const alternateHtml=await alternate.text();assert.match(alternateHtml,/NightCare/);
-  const alternateAsset=alternateHtml.match(/src="(\/dashboard\/assets\/[^"]+)"/);
-  assert.ok(alternateAsset,'Alternate dashboard assets must use their own prefix');
-  assert.equal((await fetch(origin+alternateAsset[1])).status,200);
+  for(const path of ['/dashboard','/dashboard/']) {
+    const redirect=await fetch(origin+path,{redirect:'manual'});assert.equal(redirect.status,308);assert.equal(redirect.headers.get('location'),'/');
+  }
+  const html=await (await fetch(origin)).text();
+  const asset=html.match(/src="([^"]+\.js)"/);assert.ok(asset);assert.equal((await fetch(origin+asset[1])).status,200);
   ws=new WebSocket(origin.replace('http','ws')+'/ws');let snapshot;ws.on('message',r=>{snapshot=JSON.parse(r.toString()).data;});await until(()=>snapshot?.device.online);
   const original=(await api('/api/status')).data.eventCount;const duplicate=event('HELP_REITERATED','duplicate');await publish('events',duplicate);await publish('events',duplicate);
   await until(async()=>(await api('/api/status')).data.eventCount===original+1);
@@ -57,7 +57,8 @@ if(process.argv[2]==='serve'){
   assert.equal((await api('/api/config',{...settings,brightnessPct:0})).status,400);
   const desired=await api('/api/config',settings);assert.equal(desired.status,202);
   await until(()=>snapshot?.device.state.appliedConfigVersion===desired.data.configVersion);
-  assert.equal(snapshot.device.state.brightnessPct,55);console.log('PASS demo: static dashboard, WebSocket, config confirmation and event deduplication');
+  assert.equal(snapshot.device.state.brightnessPct,55);assert.equal(snapshot.device.state.runtimeSettings.offDelaySec,5);
+  for(const kind of ['events','requests','commands','configs'])assert.ok(Array.isArray((await api('/api/'+kind+'?page=true&limit=1')).data.items));console.log('PASS demo: static dashboard, WebSocket, config confirmation and event deduplication');
   const ack={commandId:'ack-demo',requestId:request,action:'ACK_HELP'};
   assert.equal((await api('/api/commands',ack)).status,202);
   await until(()=>snapshot?.device.state.assistanceStatus==='ACKNOWLEDGED');

@@ -1153,15 +1153,6 @@ td:first-child {
   width: 18px;
   height: 18px;
 }
-.login {
-  display: flex;
-  align-items: flex-end;
-  gap: 16px;
-  margin-bottom: 24px;
-}
-.login > label {
-  flex: 1;
-}
 footer {
   display: flex;
   justify-content: space-between;
@@ -1566,10 +1557,6 @@ footer {
   .actual-values strong {
     font-size: 16px;
   }
-  .login {
-    flex-direction: column;
-    align-items: stretch;
-  }
   footer {
     flex-direction: column;
     gap: 8px;
@@ -1598,3 +1585,16 @@ footer {
   white-space: normal;
   line-height: 1.45;
 }
+
+/* Consultas e controles do painel unificado. */
+.quick-modes { border: 0; padding: 0 0 1.4rem; margin: 0; min-width: 0; }
+.quick-modes legend { font-weight: 600; margin-bottom: .7rem; }
+.quick-modes .actions { flex-wrap: wrap; }
+.record-controls { display: flex; gap: .75rem; align-items: center; flex-wrap: wrap; margin-top: 1rem; }
+.record-controls span { font-size: .85rem; color: var(--muted); }
+.archive-lists { display: grid; gap: 1.5rem; margin-top: 1.5rem; min-width: 0; }
+.archive-list { min-width: 0; }
+.archive-list h2 { margin-bottom: .75rem; }
+.archive-list td { vertical-align: top; }
+.archive-list .mono, .assistance .mono { overflow-wrap: anywhere; }
+[hidden] { display: none !important; }

@@ -28,7 +28,6 @@ services:
       MQTT_USER: nightcare-backend
       MQTT_PASSWORD: ${MQTT_BACKEND_PASSWORD:?Execute scripts/setup.sh HOST_PUBLICO}
       MQTT_CA_FILE: /run/nightcare/ca.crt
-      API_TOKEN: ${API_TOKEN:?Execute scripts/setup.sh HOST_PUBLICO}
     ports:
       - "127.0.0.1:3000:3000"
     volumes:

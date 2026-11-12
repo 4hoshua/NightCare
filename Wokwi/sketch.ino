@@ -1309,6 +1309,13 @@ void updateConnectivity(unsigned long now) {
   state["clockValid"] = clockService.valid && clockService.testMode == -1;
   state["appliedConfigVersion"] = appliedConfigVersion; state["droppedEvents"] = droppedEvents;
   state["persistenceOk"] = storageReady && (assistance.state == AssistanceState::NONE || assistance.persisted);
+  char startTime[6], endTime[6];
+  snprintf(startTime,sizeof(startTime),"%02u:%02u",config.startMinute/60,config.startMinute%60);
+  snprintf(endTime,sizeof(endTime),"%02u:%02u",config.endMinute/60,config.endMinute%60);
+  state["runtimeSettings"]["offDelaySec"] = config.offDelaySec;
+  state["runtimeSettings"]["startTime"] = startTime;
+  state["runtimeSettings"]["endTime"] = endTime;
+  state["runtimeSettings"]["timezoneOffsetHours"] = config.utcOffset;
   String comparable; serializeJson(state,comparable);
   if (comparable != lastState || now-lastHeartbeatMs >= 15000UL) {
     state["sequence"] = ++stateSequence; state["uptimeMs"] = now; String payload; serializeJson(state,payload);
