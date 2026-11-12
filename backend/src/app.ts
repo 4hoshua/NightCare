@@ -1,5 +1,8 @@
+import fastifyStatic from '@fastify/static';
 import Fastify from 'fastify';
 import { timingSafeEqual } from 'node:crypto';
+import { existsSync } from 'node:fs';
+import { fileURLToPath } from 'node:url';
 import { z } from 'zod';
 import { commandInput, settingsSchema } from './contracts.js';
 import { Store } from './store.js';
@@ -83,6 +86,9 @@ export async function buildApp(
 
     return c ?? reply.code(404).send({ error: 'NOT_FOUND' });
   });
+
+  const publicDir = fileURLToPath(new URL('../public', import.meta.url));
+  if (existsSync(publicDir)) await app.register(fastifyStatic, { root: publicDir });
 
   return app;
 }
