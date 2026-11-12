@@ -6,6 +6,12 @@ RUN npm ci
 COPY backend/tsconfig.json ./
 COPY backend/src ./src
 RUN npm run build
+FROM node:22.21.1-bookworm-slim AS dashboard
+WORKDIR /dashboard
+COPY dashboard/package*.json ./
+RUN npm ci
+COPY dashboard/ ./
+RUN npm run build
 FROM build AS test
 COPY backend/test ./test
 COPY scripts/integration.mjs ./integration.mjs
@@ -17,6 +23,7 @@ ENV NODE_ENV=production HOST=0.0.0.0 DB_PATH=/data/nightcare.sqlite
 WORKDIR /app
 COPY --from=production-deps /app/node_modules ./node_modules
 COPY --from=build /app/dist ./dist
+COPY --from=dashboard /dashboard/dist ./public
 COPY --from=build /app/package.json ./
 RUN mkdir /data && chown node:node /data
 USER node
