@@ -15,3 +15,5 @@ Wokwi/mqtt_demo.h
 Wokwi/demo
 
 .playwright-mcp/
+
+Wokwi/tls/

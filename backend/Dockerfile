@@ -16,6 +16,7 @@ FROM build AS test
 COPY backend/test ./test
 COPY scripts/integration.mjs ./integration.mjs
 COPY scripts/demo-integration.mjs ./demo-integration.mjs
+COPY scripts/multi-device-integration.mjs ./multi-device-integration.mjs
 RUN npm test
 FROM build AS production-deps
 RUN npm prune --omit=dev

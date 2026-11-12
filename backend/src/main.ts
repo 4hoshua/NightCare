@@ -62,7 +62,7 @@ client.on("connect", () => {
   void (async () => {
     await client.subscribeAsync(
       ["events", "state", "availability", "acks"].map(
-        (t) => env.MQTT_PREFIX + t,
+        (t) => store.rootPrefix + "+/" + t,
       ),
       { qos: 1 },
     );

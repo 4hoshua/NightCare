@@ -8,6 +8,7 @@ import {
   type Settings,
   type Snapshot,
   type EventRow,
+  type Overview,
 } from "./model";
 import { Sidebar, Icon, pages, readPage } from "./navigation";
 import {
@@ -18,11 +19,45 @@ import {
   StatusBadge,
 } from "./views";
 import { ArchiveLists, useRecords } from "./records";
+import { FleetOverview, FleetAlerts, FleetAdmin, FleetApp } from "./fleet";
 import "./style.css";
-function App() {
+export function DeviceApp({
+  deviceId,
+  active,
+  overview,
+  connected,
+  sound,
+  toggleSound,
+  onSelect,
+  demo,
+}: {
+  deviceId: string;
+  active: boolean;
+  overview: Overview | null;
+  connected: boolean;
+  sound: boolean;
+  toggleSound: () => void;
+  onSelect: (id: string, page?: string) => void;
+  demo: boolean | null;
+}) {
+  const snapshot = overview?.snapshots[deviceId]
+    ? {
+        ...overview.snapshots[deviceId],
+        brokerConnected: overview.brokerConnected,
+      }
+    : null;
+  const deviceNames = Object.fromEntries(
+    (overview?.devices ?? []).map((d) => [
+      d.deviceId,
+      d.bed?.name ?? `Sem leito · ${d.deviceId}`,
+    ]),
+  );
   const [page, setPage] = useState(readPage);
   const [collapsed, setCollapsed] = useState(false);
   const [mobileOpen, setMobileOpen] = useState(false);
+  useEffect(() => {
+    if (!active) setMobileOpen(false);
+  }, [active]);
   const closeMenu = useCallback(() => setMobileOpen(false), []);
   useEffect(() => {
     const navigate = () => {
@@ -45,84 +80,46 @@ function App() {
     };
   }, []);
   useEffect(() => {
+    if (!active) return;
     document.title = `${pages.find((p) => p.id === page)!.label} · NightCare`;
     window.scrollTo(0, 0);
-  }, [page]);
-  const [demo, setDemo] = useState<boolean | null>(null);
-  const [snapshot, setSnapshot] = useState<Snapshot | null>(null),
-    [connected, setConnected] = useState(false),
-    [error, setError] = useState("");
+  }, [page, active]);
+  const [error, setError] = useState("");
   const [form, setForm] = useState<Settings>(defaults),
     [dirty, setDirty] = useState(false),
     [saving, setSaving] = useState(false),
     [sending, setSending] = useState(false),
     [notice, setNotice] = useState("");
   const [filter, setFilter] = useState({ type: "", from: "", to: "" });
+  const [allHistory, setAllHistory] = useState(false);
   const historyQuery = (() => {
+    if (!deviceId && !allHistory) return null;
     if (filter.from && filter.to && filter.from > filter.to) return null;
     const params = new URLSearchParams();
+    if (allHistory) params.set("scope", "all");
     if (filter.type) params.set("type", filter.type);
     if (filter.from) params.set("from", new Date(filter.from).toISOString());
     if (filter.to) params.set("to", new Date(filter.to).toISOString());
     return params.toString();
   })();
   const historyRecords = useRecords<EventRow>(
-    "events",
+    allHistory ? "events" : `devices/${deviceId}/events`,
     historyQuery,
-    `${snapshot?.eventCount}:${connected}`,
+    `${allHistory ? JSON.stringify(overview?.devices.map((d) => overview?.snapshots[d.deviceId]?.eventCount)) : snapshot?.eventCount}:${connected}`,
   );
   const events = historyRecords.items;
   const historyError =
     historyQuery === null
-      ? "O início deve ser anterior ao fim."
+      ? deviceId || allHistory
+        ? "O início deve ser anterior ao fim."
+        : ""
       : historyRecords.error;
-  const [sound, setSound] = useState(false),
-    [now, setNow] = useState(Date.now());
-  const audio = useRef<AudioContext | null>(null),
-    statusRef = useRef(false),
-    initialized = useRef(false);
+  const [now, setNow] = useState(Date.now());
+  const initialized = useRef(false);
   const state = snapshot?.device.state;
   useEffect(() => {
-    fetch("/ui-config")
-      .then((r) => r.json())
-      .then((v) => setDemo(v.demo))
-      .catch(() => setError("Não foi possível conectar ao backend."));
-    const t = setInterval(() => setNow(Date.now()), 1000);
-    return () => clearInterval(t);
-  }, []);
-  useEffect(() => {
-    let active = true,
-      socket: WebSocket | undefined,
-      retry: ReturnType<typeof setTimeout> | undefined;
-    function connect() {
-      socket = new WebSocket(
-        `${location.protocol === "https:" ? "wss" : "ws"}://${location.host}/ws`,
-      );
-      socket.onmessage = (e) => {
-        try {
-          const message = JSON.parse(e.data);
-          if (message.type === "snapshot" && active) {
-            setSnapshot(message.data);
-            setConnected(true);
-            setError("");
-          }
-        } catch {
-          setError("Resposta inválida do painel.");
-        }
-      };
-      socket.onclose = (e) => {
-        if (!active) return;
-        setConnected(false);
-        retry = setTimeout(connect, 2000);
-      };
-      socket.onerror = () => socket?.close();
-    }
-    connect();
-    return () => {
-      active = false;
-      clearTimeout(retry);
-      socket?.close();
-    };
+    const timer = setInterval(() => setNow(Date.now()), 1000);
+    return () => clearInterval(timer);
   }, []);
   useEffect(() => {
     if (!snapshot || initialized.current) return;
@@ -130,44 +127,6 @@ function App() {
     if (desired) setForm({ ...defaults, ...desired });
     initialized.current = true;
   }, [snapshot]);
-  statusRef.current = !!connected && state?.assistanceStatus === "PENDING";
-  useEffect(() => {
-    if (!sound) return;
-    const beep = () => {
-      const ctx = audio.current;
-      if (!statusRef.current || !ctx || ctx.state !== "running") return;
-      const osc = ctx.createOscillator(),
-        gain = ctx.createGain();
-      osc.frequency.value = 660;
-      gain.gain.value = 0.08;
-      osc.connect(gain);
-      gain.connect(ctx.destination);
-      osc.start();
-      osc.stop(ctx.currentTime + 0.15);
-    };
-    beep();
-    const t = setInterval(beep, 5000);
-    return () => clearInterval(t);
-  }, [sound]);
-  useEffect(
-    () => () => {
-      void audio.current?.close();
-    },
-    [],
-  );
-  async function toggleSound() {
-    if (sound) {
-      setSound(false);
-      return;
-    }
-    try {
-      audio.current ??= new AudioContext();
-      await audio.current.resume();
-      setSound(true);
-    } catch {
-      setError("O navegador não permitiu o áudio.");
-    }
-  }
   const request =
     snapshot?.activeRequest ??
     snapshot?.requests.find((r) => r.request_id === state?.requestId);
@@ -185,6 +144,7 @@ function App() {
   );
   const canAct =
     connected &&
+    !!snapshot?.device.bed &&
     snapshot?.device.online &&
     state?.clockValid &&
     !sending &&
@@ -216,7 +176,7 @@ function App() {
         endTime: form.endTime,
         timezone: form.timezone,
       };
-      const result = await api("/api/config", payload);
+      const result = await api(`/api/devices/${deviceId}/config`, payload);
       desiredRef.current = payload;
       if (revision === editRevision.current) setDirty(false);
       setNotice(
@@ -246,7 +206,7 @@ function App() {
       timezone: base.timezone,
     };
     try {
-      const result = await api("/api/config", payload);
+      const result = await api(`/api/devices/${deviceId}/config`, payload);
       desiredRef.current = payload;
       setForm((f) => ({ ...f, mode }));
       setNotice(
@@ -264,7 +224,7 @@ function App() {
     setSending(true);
     setError("");
     try {
-      await api("/api/commands", {
+      await api(`/api/devices/${deviceId}/commands`, {
         commandId: newId(),
         requestId: state.requestId,
         action: selected,
@@ -278,20 +238,22 @@ function App() {
   }
   const currentPage = pages.find((p) => p.id === page)!;
   const online = connected && !!snapshot?.device.online;
-  const activeRequest = !!state?.requestId;
+  const activeRequest = !!overview?.devices.some((d) => d.state?.requestId);
   return (
     <div className={`app-shell ${collapsed ? "nav-collapsed" : ""}`}>
       <a
         className="skip-link"
-        href="#page-content"
+        href={`#page-content-${deviceId}`}
         onClick={(event) => {
           event.preventDefault();
-          document.getElementById("page-content")?.focus();
+          document.getElementById(`page-content-${deviceId}`)?.focus();
         }}
       >
         Pular para o conteúdo
       </a>
       <Sidebar
+        navigationId={`primary-navigation-${deviceId}`}
+        triggerId={`menu-toggle-${deviceId}`}
         page={page}
         collapsed={collapsed}
         onCollapse={() => setCollapsed((v) => !v)}
@@ -303,16 +265,34 @@ function App() {
         <header className="topbar">
           <div className="topbar-location">
             <button
+              id={`menu-toggle-${deviceId}`}
               className="icon-button menu-toggle"
               aria-label="Abrir menu"
               aria-expanded={mobileOpen}
-              aria-controls="primary-navigation"
+              aria-controls={`primary-navigation-${deviceId}`}
               onClick={() => setMobileOpen(true)}
             >
               <Icon name="menu" />
             </button>
             <span className="breadcrumb">
-              Seu ambiente<span>/</span>
+              <label className="bed-picker">
+                Leito
+                <select
+                  aria-label="Selecionar leito ou dispositivo"
+                  value={deviceId}
+                  onChange={(e) => onSelect(e.target.value)}
+                >
+                  {!overview?.devices.length && (
+                    <option value="">Aguardando dispositivos</option>
+                  )}
+                  {overview?.devices.map((d) => (
+                    <option key={d.deviceId} value={d.deviceId}>
+                      {d.bed?.name ?? `Sem leito · ${d.deviceId}`}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <span>/</span>
               <strong>{currentPage.label}</strong>
             </span>
           </div>
@@ -344,7 +324,7 @@ function App() {
             </button>
           </div>
         </header>
-        <main id="page-content" tabIndex={-1}>
+        <main id={`page-content-${deviceId}`} tabIndex={-1}>
           <div className="page-heading">
             <div>
               <p className="eyebrow">
@@ -364,6 +344,16 @@ function App() {
               </span>
             </div>
           </div>
+          <p className="selected-bed">
+            Selecionado:{" "}
+            <strong>{deviceNames[deviceId] ?? "Nenhum dispositivo"}</strong>{" "}
+            {deviceId && <span className="mono">· {deviceId}</span>}
+          </p>
+          <FleetAlerts
+            overview={overview}
+            connected={connected}
+            onSelect={onSelect}
+          />
           {error && (
             <p role="alert" className="error">
               {error}
@@ -388,28 +378,12 @@ function App() {
                 : "Painel sem atualização ao vivo. Os valores exibidos correspondem à última informação recebida."}
             </p>
           )}
-          {activeRequest && page !== "assistencia" && (
-            <a className="assistance-banner" href="#assistencia">
-              <span className="banner-icon">
-                <Icon name="help" />
-              </span>
-              <div>
-                <strong>
-                  {state?.assistanceStatus === "PENDING"
-                    ? "Um pedido de ajuda precisa de atenção."
-                    : "Há um atendimento em andamento."}
-                </strong>
-                <span>
-                  {online
-                    ? "Acompanhe o chamado e confirme as ações na tela de Assistência."
-                    : "Último chamado conhecido. Aguarde a reconexão para confirmar novas ações."}
-                </span>
-              </div>
-              <Icon name="arrow" />
-            </a>
-          )}
           {page === "dashboard" && (
-            <DashboardView snapshot={snapshot} connected={connected} />
+            <FleetOverview
+              overview={overview}
+              connected={connected}
+              onSelect={onSelect}
+            />
           )}
           {page === "iluminacao" && (
             <LightingView
@@ -421,6 +395,7 @@ function App() {
               change={change}
               save={save}
               quickMode={quickMode}
+              canConfigure={!!snapshot?.device.bed}
             />
           )}
           {page === "assistencia" && (
@@ -434,6 +409,18 @@ function App() {
             />
           )}
           <div hidden={page !== "administracao"}>
+            <FleetAdmin overview={overview} connected={connected} />
+            <label className="history-scope">
+              Históricos
+              <select
+                aria-label="Abrangência do histórico"
+                value={allHistory ? "all" : "selected"}
+                onChange={(e) => setAllHistory(e.target.value === "all")}
+              >
+                <option value="selected">Dispositivo selecionado</option>
+                <option value="all">Todos os dispositivos</option>
+              </select>
+            </label>
             <AdminView
               snapshot={snapshot}
               connected={connected}
@@ -443,8 +430,17 @@ function App() {
               historyError={historyError}
               demo={demo}
               historyRecords={historyRecords}
+              deviceNames={deviceNames}
             />
-            <ArchiveLists snapshot={snapshot} connected={connected} />
+            <ArchiveLists
+              snapshot={snapshot}
+              connected={connected}
+              scope={allHistory ? "all" : deviceId}
+              deviceNames={deviceNames}
+              revision={
+                allHistory ? JSON.stringify(overview?.snapshots) : undefined
+              }
+            />
           </div>
           <footer>
             <span className="footer-brand">NightCare</span>
@@ -459,4 +455,6 @@ function App() {
     </div>
   );
 }
-createRoot(document.getElementById("root")!).render(<App />);
+createRoot(document.getElementById("root")!).render(
+  <FleetApp renderDevice={(props) => <DeviceApp {...props} />} />,
+);

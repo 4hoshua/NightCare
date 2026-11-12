@@ -42,7 +42,9 @@ if(process.argv[2]==='serve'){
 }else{
  let ws;
  try{
-  await until(async()=>(await api('/api/status')).data.device.online);
+  await until(async()=>(await api('/api/devices/nightcare-001/status')).data.device?.online);
+  const found=(await api('/api/devices')).data.find(d=>d.deviceId==='nightcare-001');
+  if(!found.bed)assert.equal((await api('/api/devices/nightcare-001/assign',{name:'Leito 1'})).status,201);
   assert.equal((await api('/ui-config')).data.demo,true);
   const document=await fetch(origin);assert.equal(document.status,200);assert.match(await document.text(),/NightCare/);
   for(const path of ['/dashboard','/dashboard/']) {

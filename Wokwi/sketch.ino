@@ -38,6 +38,11 @@
 #error "Crie a aba mqtt_demo.h para a demo gratuita, ou forneca mqtt_secrets.h para TLS."
 #endif
 
+#ifndef NIGHTCARE_DEVICE_ID
+#define NIGHTCARE_DEVICE_ID "nightcare-001"
+#endif
+static_assert(sizeof(NIGHTCARE_DEVICE_ID) > 1 && sizeof(NIGHTCARE_DEVICE_ID) <= 33, "deviceId deve ter 1..32 caracteres");
+
 void recordEvent(const char* type, const char* request = nullptr);
 void beginConnectivity();
 void updateConnectivity(unsigned long now);
@@ -435,7 +440,7 @@ enum class AssistanceState {
 struct AssistanceController {
   AssistanceState state = AssistanceState::NONE;
 
-  char requestId[48] = "";
+  char requestId[65] = "";
   unsigned long pressCount = 0;
 
   unsigned long signalStartedMs = 0;
@@ -458,7 +463,7 @@ struct AssistanceController {
   }
 
   void generateRequestId() {
-    const String id = String("nightcare-001-") + bootId + "-" + String(++eventCounter);
+    const String id = (String(NIGHTCARE_DEVICE_ID) + "-") + bootId + "-" + String(++eventCounter);
     snprintf(requestId, sizeof(requestId), "%s", id.c_str());
   }
 
@@ -529,12 +534,12 @@ struct AssistanceController {
     unsigned version = 0;
     unsigned storedState = 0;
     unsigned long storedCount = 0;
-    char storedId[48] = "";
+    char storedId[65] = "";
     int consumed = 0;
 
     const int fields = sscanf(
       record.c_str(),
-      "%u,%u,%lu,%47s%n",
+      "%u,%u,%lu,%64s%n",
       &version,
       &storedState,
       &storedCount,
@@ -543,11 +548,11 @@ struct AssistanceController {
     );
 
     bool validId =
-      strlen(storedId) >= 29 && strlen(storedId) < 48 &&
-      strncmp(storedId, "nightcare-001-", 13) == 0;
+      strlen(storedId) > strlen(NIGHTCARE_DEVICE_ID) + 17 && strlen(storedId) < 65 &&
+      strncmp(storedId, (String(NIGHTCARE_DEVICE_ID) + "-").c_str(), strlen(NIGHTCARE_DEVICE_ID) + 1) == 0;
 
     if (validId) {
-      for (size_t i = 13; i < strlen(storedId); i++) {
+      for (size_t i = strlen(NIGHTCARE_DEVICE_ID) + 1; i < strlen(storedId); i++) {
         const char c = storedId[i];
 
         if (!((c >= '0' && c <= '9') ||
@@ -764,6 +769,7 @@ void refreshLighting() {
 }
 
 void printStatus() {
+  Serial.printf("[DISPOSITIVO] id=%s\n", NIGHTCARE_DEVICE_ID);
   Serial.printf(
     "[CONFIG] modo=%s | brilho=%u%% | tempo=%u s\n",
     modeName(),
@@ -1069,10 +1075,10 @@ bool lastMotion = false;
 bool lastLight = false;
 String lastState;
 #ifndef MQTT_TOPIC_PREFIX
-#define MQTT_TOPIC_PREFIX "nightcare/nightcare-001/"
+#define MQTT_TOPIC_PREFIX "nightcare/" NIGHTCARE_DEVICE_ID "/"
 #endif
 #ifndef MQTT_CLIENT_ID
-#define MQTT_CLIENT_ID "nightcare-001"
+#define MQTT_CLIENT_ID NIGHTCARE_DEVICE_ID
 #endif
 #ifndef MQTT_USE_TLS
 #define MQTT_USE_TLS 1
@@ -1090,14 +1096,14 @@ String utcNow() {
   const time_t now = time(nullptr); struct tm utc; gmtime_r(&now, &utc);
   char text[25]; strftime(text, sizeof(text), "%Y-%m-%dT%H:%M:%SZ", &utc); return text;
 }
-void envelope(JsonDocument& doc) { doc["schemaVersion"] = 1; doc["deviceId"] = "nightcare-001"; }
+void envelope(JsonDocument& doc) { doc["schemaVersion"] = 1; doc["deviceId"] = NIGHTCARE_DEVICE_ID; }
 const char* assistanceName() {
   return assistance.state == AssistanceState::NONE ? "NONE" : assistance.state == AssistanceState::PENDING ? "PENDING" : "ACKNOWLEDGED";
 }
 void recordEvent(const char* type, const char* request) {
   JsonDocument doc; envelope(doc);
   // The opening event ID is exactly its requestId; later events have fresh IDs.
-  doc["eventId"] = strcmp(type,"HELP_OPENED") == 0 ? String(request) : String("nightcare-001-") + bootId + "-" + String(++eventCounter);
+  doc["eventId"] = strcmp(type,"HELP_OPENED") == 0 ? String(request) : (String(NIGHTCARE_DEVICE_ID) + "-") + bootId + "-" + String(++eventCounter);
   doc["bootId"] = bootId; doc["type"] = type; doc["uptimeMs"] = millis();
   const String timestamp = utcNow();
   if (timestamp.isEmpty()) doc["occurredAt"] = nullptr; else doc["occurredAt"] = timestamp;
@@ -1155,7 +1161,7 @@ void beginConnectivity() {
   if (!inboundQueue || !deliveryQueue) { Serial.println("[MQTT] Sem memoria; controle local continua."); return; }
   if (strstr(MQTT_HOST,".example") || strstr(MQTT_PASSWORD,"SUBSTITUA")) { Serial.println("[MQTT] Preencha mqtt_secrets.h para habilitar a rede."); return; }
   static String uri = String(MQTT_USE_TLS ? "mqtts://" : "mqtt://") + MQTT_HOST + ":" + String(MQTT_PORT);
-  static const char will[] = "{\"schemaVersion\":1,\"deviceId\":\"nightcare-001\",\"status\":\"offline\"}";
+  static const char will[] = "{\"schemaVersion\":1,\"deviceId\":\"" NIGHTCARE_DEVICE_ID "\",\"status\":\"offline\"}";
   esp_mqtt_client_config_t cfg = {};
 #if ESP_IDF_VERSION_MAJOR >= 5
   cfg.broker.address.uri = uri.c_str(); cfg.broker.verification.certificate = MQTT_USE_TLS ? MQTT_CA : nullptr;
@@ -1185,7 +1191,7 @@ void applyRemoteConfig(JsonDocument& doc) {
   Configuration candidate = config; uint16_t start = 0, end = 0;
   const String mode = doc["mode"] | "";
   const bool valid = doc.size() == 9 && doc["schemaVersion"].is<int>() && doc["schemaVersion"].as<int>() == 1 &&
-    String(doc["deviceId"] | "") == "nightcare-001" &&
+    String(doc["deviceId"] | "") == NIGHTCARE_DEVICE_ID &&
     (mode == "AUTO" || mode == "ON" || mode == "OFF") &&
     validInteger(doc["brightnessPct"],1,100) && validInteger(doc["offDelaySec"],1,600) &&
     parseHHMM(doc["startTime"] | "",start) && parseHHMM(doc["endTime"] | "",end) &&
@@ -1232,7 +1238,7 @@ void applyRemoteCommand(JsonDocument& doc, bool retained) {
   JsonDocument ack; ack["commandId"] = id; ack["requestId"] = request;
   const String fingerprint = request + "|" + action + "|" + String(doc["issuedAt"] | "") + "|" + String(doc["expiresAt"] | "");
   if (retained) { sendAck(ack,"REJECTED","RETAINED_COMMAND"); return; }
-  if (doc.size() != 7 || !doc["schemaVersion"].is<int>() || doc["schemaVersion"].as<int>() != 1 || String(doc["deviceId"] | "") != "nightcare-001") { sendAck(ack,"REJECTED","INVALID_COMMAND"); return; }
+  if (doc.size() != 7 || !doc["schemaVersion"].is<int>() || doc["schemaVersion"].as<int>() != 1 || String(doc["deviceId"] | "") != NIGHTCARE_DEVICE_ID) { sendAck(ack,"REJECTED","INVALID_COMMAND"); return; }
   JsonDocument journal; deserializeJson(journal,commandJournal);
   for (JsonObject entry : journal.as<JsonArray>()) if (String(entry["id"] | "") == id) {
     const bool same = String(entry["fingerprint"] | "") == fingerprint;
@@ -1272,7 +1278,7 @@ void updateConnectivity(unsigned long now) {
   }
   if (mqttJustConnected) {
     mqttJustConnected = false; retryDelayMs = 1000; retryStartedMs = 0; lastState = "";
-    enqueueMqtt("availability","{\"schemaVersion\":1,\"deviceId\":\"nightcare-001\",\"status\":\"online\"}",true);
+    enqueueMqtt("availability","{\"schemaVersion\":1,\"deviceId\":\"" NIGHTCARE_DEVICE_ID "\",\"status\":\"online\"}",true);
     Serial.printf("[MQTT] Conectado com %s e QoS 1.\n", MQTT_USE_TLS ? "TLS" : "TCP demo publico");
   }
   InboundMessage incoming;

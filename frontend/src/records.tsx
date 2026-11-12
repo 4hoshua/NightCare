@@ -50,9 +50,9 @@ export function useRecords<T>(
     }
   }
   useEffect(() => {
-    if (previousQuery.current !== query) {
+    if (previousQuery.current !== `${kind}?${query}`) {
       expanded.current = false;
-      previousQuery.current = query;
+      previousQuery.current = `${kind}?${query}`;
       setItems([]);
       setNext(null);
     }
@@ -103,6 +103,7 @@ export function RecordControls({ records }: { records: Records<unknown> }) {
   );
 }
 type StoredRow = {
+  device_id: string;
   request_id?: string;
   command_id?: string;
   config_version?: number;
@@ -127,12 +128,20 @@ function ArchiveList({
   kind,
   title,
   revision,
+  scope,
+  deviceNames,
 }: {
   kind: string;
   title: string;
   revision: string;
+  scope: string;
+  deviceNames: Record<string, string>;
 }) {
-  const records = useRecords<StoredRow>(kind, "", revision);
+  const records = useRecords<StoredRow>(
+    scope === "all" ? kind : `devices/${scope}/${kind}`,
+    scope === "all" ? "scope=all" : scope ? "" : null,
+    revision,
+  );
   return (
     <section className="card archive-list">
       <h2>{title}</h2>
@@ -149,6 +158,7 @@ function ArchiveList({
         <table>
           <thead>
             <tr>
+              <th>Leito / dispositivo</th>
               <th>Identificador</th>
               <th>Data</th>
               <th>Resultado</th>
@@ -157,7 +167,10 @@ function ArchiveList({
           </thead>
           <tbody>
             {records.items.map((row) => (
-              <tr key={row.command_id ?? row.config_version ?? row.request_id}>
+              <tr
+                key={`${row.device_id}/${row.command_id ?? row.config_version ?? row.request_id}`}
+              >
+                <td>{deviceNames[row.device_id] ?? row.device_id}</td>
                 <td className="request">
                   {row.command_id ??
                     (row.config_version
@@ -212,26 +225,38 @@ function ArchiveList({
 export function ArchiveLists({
   snapshot,
   connected,
+  scope,
+  deviceNames,
+  revision,
 }: {
   snapshot: Snapshot | null;
   connected: boolean;
+  scope: string;
+  deviceNames: Record<string, string>;
+  revision?: string;
 }) {
   return (
     <div className="archive-lists">
       <ArchiveList
         kind="requests"
         title="Histórico de chamados"
-        revision={JSON.stringify([connected, snapshot?.requests])}
+        scope={scope}
+        deviceNames={deviceNames}
+        revision={revision ?? JSON.stringify([connected, snapshot?.requests])}
       />
       <ArchiveList
         kind="commands"
         title="Histórico de comandos"
-        revision={JSON.stringify([connected, snapshot?.commands])}
+        scope={scope}
+        deviceNames={deviceNames}
+        revision={revision ?? JSON.stringify([connected, snapshot?.commands])}
       />
       <ArchiveList
         kind="configs"
         title="Histórico de configurações"
-        revision={JSON.stringify([connected, snapshot?.configs])}
+        scope={scope}
+        deviceNames={deviceNames}
+        revision={revision ?? JSON.stringify([connected, snapshot?.configs])}
       />
     </div>
   );

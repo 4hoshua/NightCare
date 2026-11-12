@@ -1,16 +1,16 @@
-user nightcare-001
- topic write nightcare/nightcare-001/events
- topic write nightcare/nightcare-001/state
- topic write nightcare/nightcare-001/availability
- topic write nightcare/nightcare-001/acks
- topic read nightcare/nightcare-001/config/set
- topic read nightcare/nightcare-001/commands
+# Device username equals its permanent deviceId. Patterns apply to all users.
+pattern write nightcare/%u/events
+pattern write nightcare/%u/state
+pattern write nightcare/%u/availability
+pattern write nightcare/%u/acks
+pattern read nightcare/%u/config/set
+pattern read nightcare/%u/commands
 user nightcare-backend
- topic read nightcare/nightcare-001/events
- topic read nightcare/nightcare-001/state
- topic read nightcare/nightcare-001/availability
- topic read nightcare/nightcare-001/acks
- topic write nightcare/nightcare-001/config/set
- topic write nightcare/nightcare-001/commands
+ topic read nightcare/+/events
+ topic read nightcare/+/state
+ topic read nightcare/+/availability
+ topic read nightcare/+/acks
+ topic write nightcare/+/config/set
+ topic write nightcare/+/commands
 user nightcare-health
  topic write health/nightcare

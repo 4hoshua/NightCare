@@ -9,7 +9,13 @@ const id = z
   .max(64)
   .regex(/^[\w-]+$/);
 const iso = z.iso.datetime();
-const base = { schemaVersion: z.literal(1), deviceId: z.literal(DEVICE) };
+export const deviceIdSchema = z
+  .string()
+  .min(1)
+  .max(32)
+  .regex(/^[A-Za-z0-9_-]+$/)
+  .refine((v) => v !== "nightcare-backend" && v !== "nightcare-health");
+const base = { schemaVersion: z.literal(1), deviceId: deviceIdSchema };
 const hhmm = z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/);
 
 export const settingsSchema = z

@@ -1598,3 +1598,21 @@ footer {
 .archive-list td { vertical-align: top; }
 .archive-list .mono, .assistance .mono { overflow-wrap: anywhere; }
 [hidden] { display: none !important; }
+
+.bed-grid, .registration-grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(min(100%,320px),1fr)); gap:1.4rem; margin-bottom:1.5rem; }
+.bed-card, .device-registration { min-width:0; }
+.bed-card .mono, .selected-bed .mono { overflow-wrap:anywhere; }
+.bed-card .actions { flex-wrap:wrap; }
+.fleet-alerts { border:1px solid #e9c6af; background:#fff6ec; padding:1.1rem; border-radius:12px; margin-bottom:1.4rem; }
+.fleet-alerts h2 { font-size:1rem; margin-bottom:.7rem; }
+.fleet-alerts button { margin:.25rem .5rem .25rem 0; text-align:left; overflow-wrap:anywhere; }
+.fleet-admin { margin-bottom:1.4rem; }
+.device-registration { border-top:1px solid var(--line); padding-top:1rem; }
+.device-registration form { display:flex; gap:.7rem; flex-wrap:wrap; align-items:end; }
+.device-registration label { flex:1; min-width:180px; }
+.device-registration .mono { overflow-wrap:anywhere; }
+.bed-picker { display:flex; align-items:center; gap:.5rem; margin:0; }
+.bed-picker select { max-width:240px; width:auto; margin:0; padding:.4rem; }
+.history-scope { max-width:360px; margin-bottom:1rem; }
+.selected-bed { margin-bottom:1rem; color:var(--muted); }
+@media(max-width:600px) { .breadcrumb>strong,.breadcrumb>span { display:none; } .bed-picker { font-size:11px;gap:3px; } .bed-picker select { max-width:155px;font-size:12px; } .fleet-alerts button { max-width:100%; } }

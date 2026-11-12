@@ -45,7 +45,7 @@ export type Snapshot = {
     status: string;
   } | null;
   brokerConnected: boolean;
-  device: { online: boolean; state: State | null; lastSeen: number | null };
+  device: Device;
   configs: {
     config_version: number;
     payload: Settings;
@@ -57,6 +57,7 @@ export type Snapshot = {
 };
 export type EventRow = {
   payload?: { bootId: string; uptimeMs: number; pressCount?: number };
+  device_id: string;
   event_id: string;
   type: string;
   request_id: string | null;
@@ -108,6 +109,12 @@ export const errorNames: Record<string, string> = {
   ID_CONFLICT: "Este identificador já pertence a outra intenção.",
   INVALID_CURSOR: "A página não corresponde aos filtros. Atualize a consulta.",
   INVALID_PERIOD: "O início deve ser anterior ao fim.",
+  DEVICE_REQUIRED: "Selecione explicitamente um dispositivo.",
+  DEVICE_UNASSIGNED: "Associe o dispositivo a um leito antes de operar.",
+  DEVICE_NOT_FOUND: "Dispositivo não encontrado.",
+  DEVICE_ALREADY_ASSIGNED: "A associação é permanente e já foi realizada.",
+  BED_NAME_CONFLICT: "Já existe um leito com esse nome.",
+  BED_NOT_FOUND: "Leito não encontrado.",
   INVALID_PAYLOAD: "Confira os campos e seus limites.",
 };
 
@@ -115,9 +122,14 @@ export const errorNames: Record<string, string> = {
 export const newId = () =>
   globalThis.crypto?.randomUUID?.() ??
   `${Date.now().toString(36)}-${Math.random().toString(36).slice(2)}`;
-export async function api(path: string, body?: unknown, signal?: AbortSignal) {
+export async function api(
+  path: string,
+  body?: unknown,
+  signal?: AbortSignal,
+  method = "POST",
+) {
   const r = await fetch(path, {
-    method: body ? "POST" : "GET",
+    method: body ? method : "GET",
     headers: body ? { "Content-Type": "application/json" } : {},
     body: body ? JSON.stringify(body) : undefined,
     signal,
@@ -129,3 +141,17 @@ export async function api(path: string, body?: unknown, signal?: AbortSignal) {
     );
   return data;
 }
+
+export type Device = {
+  deviceId: string;
+  bed: { id: number; name: string } | null;
+  online: boolean;
+  state: State | null;
+  lastSeen: number | null;
+};
+export type Overview = {
+  brokerConnected: boolean;
+  devices: Device[];
+  beds: { id: number; name: string; deviceId: string }[];
+  snapshots: Record<string, Snapshot>;
+};

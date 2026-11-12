@@ -20,3 +20,5 @@ Wokwi/demo/
 Wokwi/wokwi.demo.toml
 
 .playwright-mcp/
+
+Wokwi/tls/

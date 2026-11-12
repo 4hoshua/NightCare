@@ -109,6 +109,8 @@ export function Sidebar({
   mobileOpen,
   onClose,
   activeRequest,
+  navigationId,
+  triggerId,
 }: {
   page: Page;
   collapsed: boolean;
@@ -116,13 +118,15 @@ export function Sidebar({
   mobileOpen: boolean;
   onClose: () => void;
   activeRequest: boolean;
+  navigationId: string;
+  triggerId: string;
 }) {
   const ref = useRef<HTMLElement>(null);
   useEffect(() => {
     if (!mobileOpen) return;
     // Making the main content inert can already have blurred the trigger before
     // this effect runs. Restore the explicit trigger when closing the dialog.
-    const previous = document.querySelector<HTMLButtonElement>(".menu-toggle");
+    const previous = document.getElementById(triggerId);
     const previousOverflow = document.body.style.overflow;
     document.body.style.overflow = "hidden";
     let focusFrame = requestAnimationFrame(() => {
@@ -198,7 +202,7 @@ export function Sidebar({
           <Icon name="close" />
         </button>
         <div className="nav-heading">SEU AMBIENTE</div>
-        <nav id="primary-navigation" aria-label="Principal">
+        <nav id={navigationId} aria-label="Principal">
           {pages.map((item) => (
             <a
               key={item.id}
@@ -231,7 +235,7 @@ export function Sidebar({
             onClick={onCollapse}
             aria-label={collapsed ? "Expandir navegação" : "Recolher navegação"}
             aria-expanded={!collapsed}
-            aria-controls="primary-navigation"
+            aria-controls={navigationId}
           >
             <Icon name={collapsed ? "expand" : "collapse"} />
             <span>Recolher menu</span>

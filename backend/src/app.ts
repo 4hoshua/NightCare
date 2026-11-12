@@ -5,7 +5,7 @@ import type { WebSocket } from "ws";
 import { existsSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { z } from "zod";
-import { commandInput, settingsSchema } from "./contracts.js";
+import { commandInput, settingsSchema, deviceIdSchema } from "./contracts.js";
 import { Store } from "./store.js";
 export async function buildApp(
   store: Store,
@@ -34,7 +34,7 @@ export async function buildApp(
   await app.register(websocket, { options: wsOptions });
   const sockets = new Set<WebSocket>();
   const snapshot = () => ({
-    ...store.snapshot(),
+    ...store.overview(),
     brokerConnected: brokerConnected(),
   });
   const encode = () => JSON.stringify({ type: "snapshot", data: snapshot() });
@@ -77,44 +77,93 @@ export async function buildApp(
       .send({ sqlite: true, mqtt: brokerConnected() });
   });
   app.get("/api/status", async () => ({
-    ...store.snapshot(),
+    ...store.overview(),
     brokerConnected: brokerConnected(),
   }));
+  const deviceParams = z.object({ deviceId: deviceIdSchema });
+  const nameSchema = z
+    .object({ name: z.string().trim().min(1).max(64) })
+    .strict();
+  app.get("/api/devices", async () => store.devices());
+  app.get("/api/beds", async () => store.beds());
+  app.post("/api/devices/:deviceId/assign", async (req, reply) =>
+    reply
+      .code(201)
+      .send(
+        store.assign(
+          deviceParams.parse(req.params).deviceId,
+          nameSchema.parse(req.body).name,
+        ),
+      ),
+  );
+  app.patch("/api/beds/:id", async (req) =>
+    store.renameBed(
+      z.object({ id: z.coerce.number().int().positive() }).parse(req.params).id,
+      nameSchema.parse(req.body).name,
+    ),
+  );
+  app.get("/api/devices/:deviceId/status", async (req) => {
+    const id = deviceParams.parse(req.params).deviceId;
+    store.requireDevice(id);
+    return { ...store.snapshot(id), brokerConnected: brokerConnected() };
+  });
   const pageQuery = z.object({
     limit: z.coerce.number().int().min(1).max(500).optional(),
     cursor: z.string().min(1).max(2048).optional(),
     page: z.literal("true").optional(),
+    scope: z.literal("all").optional(),
   });
-  app.get("/api/events", async (req) => {
-    const query = pageQuery
-      .extend({
-        type: z.string().max(64).optional(),
-        from: z.iso.datetime().optional(),
-        to: z.iso.datetime().optional(),
-      })
-      .strict()
-      .parse(req.query);
-    if (query.from && query.to && Date.parse(query.from) > Date.parse(query.to))
-      throw Object.assign(new Error("INVALID_PERIOD"), { statusCode: 400 });
-    return query.page || query.cursor
-      ? store.page("events", query)
-      : store.history(query);
-  });
-  for (const kind of ["requests", "commands", "configs"] as const) {
-    app.get("/api/" + kind, async (req) =>
-      store.page(kind, pageQuery.strict().parse(req.query)),
-    );
+  for (const prefix of ["/api", "/api/devices/:deviceId"]) {
+    const target = (params: unknown) =>
+      prefix === "/api"
+        ? store.legacyDevice()
+        : store.requireDevice(deviceParams.parse(params).deviceId).deviceId;
+    app.get(prefix + "/events", async (req) => {
+      const q = pageQuery
+        .extend({
+          type: z.string().max(64).optional(),
+          from: z.iso.datetime().optional(),
+          to: z.iso.datetime().optional(),
+        })
+        .strict()
+        .parse(req.query);
+      if (q.from && q.to && Date.parse(q.from) > Date.parse(q.to))
+        throw Object.assign(new Error("INVALID_PERIOD"), { statusCode: 400 });
+      if (q.scope && prefix !== "/api")
+        throw Object.assign(new Error("INVALID_SCOPE"), { statusCode: 400 });
+      const id = q.scope ? null : target(req.params);
+      return q.page || q.cursor || q.scope
+        ? store.page("events", q, id)
+        : store.history(q, id);
+    });
+    for (const kind of ["requests", "commands", "configs"] as const)
+      app.get(prefix + "/" + kind, async (req) => {
+        const q = pageQuery.strict().parse(req.query);
+        if (q.scope && prefix !== "/api")
+          throw Object.assign(new Error("INVALID_SCOPE"), { statusCode: 400 });
+        return store.page(kind, q, q.scope ? null : target(req.params));
+      });
+    app.post(prefix + "/config", async (req, reply) => {
+      const payload = settingsSchema.parse(req.body);
+      return reply
+        .code(202)
+        .send(await store.setConfig(payload, target(req.params)));
+    });
+    app.post(prefix + "/commands", async (req, reply) => {
+      const payload = commandInput.parse(req.body);
+      return reply
+        .code(202)
+        .send(await store.command(payload, target(req.params)));
+    });
+    app.get(prefix + "/commands/:id", async (req, reply) => {
+      const commandId = z
+        .object({ id: z.string().max(120) })
+        .parse(req.params).id;
+      return (
+        store.getCommand(commandId, target(req.params)) ??
+        reply.code(404).send({ error: "NOT_FOUND" })
+      );
+    });
   }
-  app.post("/api/config", async (req, reply) =>
-    reply.code(202).send(await store.setConfig(settingsSchema.parse(req.body))),
-  );
-  app.post("/api/commands", async (req, reply) =>
-    reply.code(202).send(await store.command(commandInput.parse(req.body))),
-  );
-  app.get("/api/commands/:id", async (req, reply) => {
-    const id = z.object({ id: z.string().max(120) }).parse(req.params).id;
-    const c = store.getCommand(id);
-    return c ?? reply.code(404).send({ error: "NOT_FOUND" });
-  });
   return app;
 }

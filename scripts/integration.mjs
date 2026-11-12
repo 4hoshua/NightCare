@@ -19,6 +19,13 @@ if(process.argv[2]==='persistence'){
 for (const [name,override] of [['wrong hostname',{checkServerIdentity:(_,cert)=>checkServerIdentity('wrong.nightcare.test',cert),username:'nightcare-001',password}],['untrusted CA',{ca:undefined,username:'nightcare-001',password}],['anonymous',{}]]) {
  await assert.rejects(mqtt.connectAsync('mqtts://mosquitto:8883',{...options,...override,clientId:'integration-negative'}));console.log('PASS: TLS/auth rejects '+name);
 }
+const secondPassword=readFileSync(root+'/Wokwi/tls/nightcare-002/mqtt_secrets.h','utf8').match(/#define MQTT_PASSWORD "([^"]+)"/)[1];
+const second=await mqtt.connectAsync('mqtts://mosquitto:8883',{...options,clientId:'integration-second',username:'nightcare-002',password:secondPassword});
+try {
+ await assert.rejects(second.publishAsync(prefix+'state','{}',{qos:1}));
+ await second.publishAsync('nightcare/nightcare-002/availability',JSON.stringify({...base,deviceId:'nightcare-002',status:'offline'}),{qos:1});
+ console.log('PASS: second TLS identity is limited to its own device topics');
+}finally{await second.endAsync();}
 const device=await mqtt.connectAsync('mqtts://mosquitto:8883',{...options,clientId:'integration-device',username:'nightcare-001',password,will:{topic:prefix+'availability',payload:JSON.stringify({...base,status:'offline'}),qos:1,retain:true}});
 try{
  await assert.rejects(device.publishAsync(prefix+'config/set','{}',{qos:1}));
@@ -28,7 +35,8 @@ try{
  const state={bootId:'integration-boot',sequence:1,uptimeMs:100,mode:'AUTO',lightOn:false,brightnessPct:30,motion:false,assistanceStatus:'PENDING',requestId:'integration-request',pressCount:1,clockValid:true,appliedConfigVersion:0,droppedEvents:0,persistenceOk:true};
  await publish('availability',{status:'online'},true);await publish('state',state,true);
  const event={bootId:'integration-boot',eventId:'integration-event',type:'HELP_OPENED',occurredAt:null,uptimeMs:100,requestId:'integration-request',pressCount:1};await publish('events',event);await publish('events',event);
- await until(async()=>{const s=await api('status');return s.device.online&&s.device.state?.requestId==='integration-request';},'state not received');
+ await until(async()=>{const s=await api('devices/nightcare-001/status');return s.device.online&&s.device.state?.requestId==='integration-request';},'state not received');
+ if(!(await api('devices')).find(d=>d.deviceId==='nightcare-001').bed)await api('devices/nightcare-001/assign',{name:'Leito 1'});
  const events=await api('events?type=HELP_OPENED');assert.equal(events.filter(e=>e.event_id==='integration-event').length,1);console.log('PASS: QoS1 event redelivery deduplicated in real SQLite');
  const configMessage=waitMessage(device,'config/set');const config=await api('config',{mode:'AUTO',brightnessPct:35,offDelaySec:30,startTime:'22:00',endTime:'06:00',timezone:'America/Sao_Paulo'});const receivedConfig=(await configMessage).payload;assert.equal(receivedConfig.configVersion,config.configVersion);
  await publish('acks',{configVersion:config.configVersion,status:'APPLIED',reason:'OK'});await publish('state',{...state,sequence:2,brightnessPct:35,appliedConfigVersion:config.configVersion});

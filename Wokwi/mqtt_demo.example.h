@@ -1,5 +1,6 @@
 #pragma once
 // Execute bash scripts/demo.sh para gerar mqtt_demo.h com namespace exclusivo.
+#define NIGHTCARE_DEVICE_ID "nightcare-001"
 #define MQTT_HOST "configure.example"
 #define MQTT_PORT 1883
 #define MQTT_USE_TLS 0

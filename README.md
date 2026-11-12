@@ -1,6 +1,6 @@
 # NightCare
 
-MVP acadêmico de Microprocessadores e Microcontroladores para apoiar deslocamentos noturnos: ESP32, sensor de movimento, luz com brilho ajustável e botão de ajuda. O cuidador acompanha o ambiente e atende chamados pelo dashboard.
+MVP acadêmico de Microprocessadores e Microcontroladores para apoiar deslocamentos noturnos: ESP32, sensor de movimento, luz com brilho ajustável e botão de ajuda. Cada leito tem um ESP32 independente; o cuidador acompanha os leitos e atende chamados pelo dashboard único.
 
 **O caminho principal é gratuito:** Wokwi no navegador, broker MQTT público sem cadastro e backend/dashboard no seu computador. Não exige gateway privado, VPS, domínio, cartão ou abertura de portas no roteador. Use somente dados fictícios: o broker da demonstração é público, sem autenticação ou privacidade. O projeto é um sistema de apoio, sem certificação médica ou garantia de prevenção de quedas.
 
@@ -57,13 +57,13 @@ Nesse caso, abra http://localhost:3001 e use a mesma variável em futuras execu�
 bash scripts/demo.sh --prepare-only
 ```
 
-O script gera `.env.demo`, `Wokwi/mqtt_demo.h` e um pacote em `Wokwi/demo/`. Ele reutiliza o identificador nas execuções seguintes, não altera `.env`, `secrets/` ou `mqtt_secrets.h` da modalidade TLS e recusa substituir um `mqtt_demo.h` que pertença a outra configuração. Não copie `.env.demo` entre demonstrações independentes: cada instalação precisa de seu próprio prefixo.
+O script gera `.env.demo`, `Wokwi/mqtt_demo.h` para compilação padrão e um pacote por dispositivo em `Wokwi/demo/<deviceId>/`. Os quatro arquivos diretos de `Wokwi/demo/` continuam como alias de `nightcare-001`. Ele reutiliza o identificador nas execuções seguintes, não altera `.env`, `secrets/` ou `mqtt_secrets.h` da modalidade TLS e recusa substituir um `mqtt_demo.h` que pertença a outra configuração. Não copie `.env.demo` entre demonstrações independentes: cada instalação precisa de seu próprio prefixo.
 
 ### Iniciar a simulação gratuita
 
 1. Abra o [circuito original no Wokwi](https://wokwi.com/projects/479504505300117505) e crie sua cópia.
-2. Substitua `sketch.ino`, `diagram.json` e `libraries.txt` pelos arquivos de **`Wokwi/demo/`** gerados pelo script.
-3. No editor do Wokwi, crie um arquivo/aba com o nome exato **`mqtt_demo.h`** e cole todo o conteúdo de `Wokwi/demo/mqtt_demo.h`. Salve antes de iniciar a simulação. Os quatro arquivos necessários são `sketch.ino`, `diagram.json`, `libraries.txt` e `mqtt_demo.h`; **não é necessário adicionar `mqtt_secrets.h`, `mqtt_secrets.example.h` ou `mqtt_demo.example.h`**. Não copie `wokwi.toml` para o navegador.
+2. Substitua `sketch.ino`, `diagram.json` e `libraries.txt` pelos arquivos de **`Wokwi/demo/nightcare-001/`** gerados pelo script.
+3. No editor do Wokwi, crie um arquivo/aba com o nome exato **`mqtt_demo.h`** e cole todo o conteúdo de `Wokwi/demo/nightcare-001/mqtt_demo.h`. Salve antes de iniciar a simulação. Os quatro arquivos necessários são `sketch.ino`, `diagram.json`, `libraries.txt` e `mqtt_demo.h`; **não é necessário adicionar `mqtt_secrets.h`, `mqtt_secrets.example.h` ou `mqtt_demo.example.h`**. Não copie `wokwi.toml` para o navegador.
 4. Inicie a simulação. Use o gateway público padrão; não habilite o gateway privado.
 5. No monitor serial, acompanhe Wi-Fi e a mensagem MQTT conectado. No painel, aguarde o dispositivo ficar online.
 6. Clique no PIR e em **Simulate Motion**. Pressione o botão AJUDA para abrir um chamado.
@@ -80,18 +80,43 @@ O ESP32 conecta a `broker.emqx.io:1883` pela internet; o backend conecta ao mesm
 | Usuário e senha MQTT | vazios; serviço público sem autenticação |
 | Painel, API e WebSocket | sem login ou token em ambas as modalidades |
 | Wi-Fi | `Wokwi-GUEST`, senha vazia |
-| Prefixo MQTT | `nightcare/demo/<identificador>/nightcare-001/` |
+| Namespace da instalação | `nightcare/demo/<identificador>/` |
+| Tópicos de cada dispositivo | `nightcare/demo/<identificador>/<deviceId>/...` |
 | Identificador da instalação | 16 caracteres hexadecimais gerados em `.env.demo` |
-| Client IDs | `nightcare-<identificador>-backend` e `nightcare-<identificador>-device` |
+| Client IDs | `nightcare-<identificador>-backend` e `nightcare-<identificador>-<deviceId>` |
 | API/dashboard | `http://localhost:3000`, apenas loopback |
 
 Não há segredos a solicitar ou configurar no modo demo. O prefixo exclusivo evita colisões acidentais, mas qualquer pessoa pode ler ou publicar mensagens se conhecer o tópico. Nunca envie dados pessoais ou credenciais por esse broker. O EMQX disponibiliza o serviço para protótipos e testes, sem necessidade de preparar infraestrutura. [Endereço e portas do broker público](https://www.emqx.com/en/mqtt/public-mqtt5-broker)
+
+## Dois leitos, duas simulações e descoberta
+
+```bash
+bash scripts/demo.sh --devices nightcare-001,nightcare-002
+# Para preparar sem iniciar o backend:
+bash scripts/demo.sh --prepare-only --devices nightcare-001,nightcare-002
+```
+
+1. Abra dois projetos/cópias distintos do circuito em janelas separadas do Wokwi; não apenas duas abas do mesmo projeto salvo. Use um único ESP32 por simulação.
+2. Na primeira, copie os quatro arquivos de `Wokwi/demo/nightcare-001/`; na segunda, os de `Wokwi/demo/nightcare-002/`. O arquivo `mqtt_demo.h` é diferente em cada pacote.
+3. Inicie ambas e mantenha as duas janelas ativas/visíveis quando possível. Cada uma conecta ao broker público, com ID, client ID e tópicos próprios; não é necessário gateway privado nem comunicação direta entre simuladores.
+4. Em **Administração → Dispositivos e leitos**, confira os IDs encontrados, informe **Leito 1** e **Leito 2** e confirme as associações. Aguarde estado novo: uma fotografia retida não habilita associação.
+5. No Dashboard, observe todos os cartões. Abra iluminação/assistência de um leito ou use **Selecionar leito ou dispositivo**. Movimento, parâmetros, chamados, comandos, relógio e presença são independentes.
+
+O backend descobre mensagens válidas **dentro do namespace da instalação**; não procura equipamentos pela rede local nem em todos os tópicos do broker. O anúncio revela a identidade, mas o operador confirma onde o dispositivo foi instalado. O firmware não conhece o nome do leito.
+
+A associação exige dispositivo online, ID ainda sem leito e nome único (desconsiderando maiúsculas/minúsculas). É permanente nesta versão: não há transferência, desassociação, exclusão ou substituição. É possível corrigir o nome sem mudar o vínculo. Dispositivos ainda sem leito continuam visíveis, inclusive com chamados conhecidos, mas não recebem configuração ou atendimento remoto antes da confirmação.
+
+IDs aceitam 1–32 letras ASCII, números, `_` e `-`; `nightcare-backend` e `nightcare-health` são reservados. São permanentes por pacote e não dependem do MAC simulado. Reexecutar a preparação preserva o namespace e acrescenta pacotes, sem apagar identidades anteriores. Não execute duas simulações com o mesmo pacote/client ID. O backend não consegue autenticar ou distinguir clones que imitem uma identidade no broker público.
+
+Um banco antigo é migrado em transação: dados de `nightcare-001` permanecem disponíveis como **Leito 1**. Esse vínculo não precisa ser confirmado de novo; seu nome pode ser corrigido. Instalação nova começa sem leitos e exige confirmação de cada dispositivo. Configurações e históricos anteriores ao vínculo continuam ligados ao deviceId e ficam consultáveis pelo leito após associação; renomear atualiza o rótulo exibido.
+
+A arquitetura de simulações separadas usa o [acesso MQTT à internet do Wokwi](https://docs.wokwi.com/guides/esp32-wifi). A [FAQ oficial](https://docs.wokwi.com/faq#how-do-i-use-multiple-microcontrollers-in-a-single-project) informa que múltiplos microcontroladores em um único projeto não são suportados. Duas sessões independentes com broker público são a abordagem adotada aqui; sua execução simultânea ainda precisa ser observada no Wokwi. Testes com clientes MQTT não comprovam a execução do firmware.
 
 ## Arquitetura
 
 ```mermaid
 flowchart LR
-  PIR[PIR e botão] --> ESP[ESP32 no Wokwi gratuito]
+  PIR[PIR e botão por leito] --> ESP[ESP32 por leito no Wokwi gratuito]
   ESP --> OUT[Luz PWM, LED de ajuda e buzzer]
   ESP <-->|MQTT público / QoS 1| BROKER[Broker público EMQX]
   BROKER <-->|MQTT| API[Backend Node / Fastify]
@@ -132,18 +157,18 @@ A barra lateral pode ser expandida ou recolhida. No celular, o botão de menu ab
 
 | Tela | Uso |
 | --- | --- |
-| Dashboard | visão geral de conexão, luz, movimento e chamado, com atalhos de acompanhamento |
+| Dashboard | cartões de todos os leitos; movimento, luz, relógio, presença e chamados simultâneos |
 | Iluminação e movimento | estado da luz e PIR; troca rápida de modo; edição de modo, brilho, agenda e prazo |
 | Assistência | pedido ativo, acionamentos do botão, tempo desde abertura, reconhecer/encerrar e resultados das últimas ações |
-| Administração | eventos por período/tipo; históricos paginados de chamados, comandos e configurações; parâmetros atuais e diagnósticos |
+| Administração | descoberta/associação, correção de nomes, históricos por dispositivo ou globais e diagnósticos |
 
-O indicador de chamado e o controle de som ficam disponíveis em todas as telas. Trocar de tela preserva o formulário em edição, os filtros, o áudio habilitado e a conexão em tempo real. Administração organiza as informações existentes; não cria um perfil de acesso separado.
+O indicador de chamado e o controle de som ficam disponíveis em todas as telas. Trocar de tela ou de dispositivo preserva separadamente os formulários e filtros de cada dispositivo. O áudio é global e considera qualquer chamado pendente; a lista global identifica o destinatário. A seleção fica no parâmetro `device` do endereço. A conexão em tempo real é compartilhada. Administração organiza as informações existentes; não cria um perfil de acesso separado.
 
 Modo e brilho atuais vêm do estado do ESP32. O firmware atualizado também publica agenda, prazo e offset UTC efetivamente ativos em `runtimeSettings`, incluindo alterações pelo serial. O painel separa esses parâmetros da configuração remota confirmada e da última configuração enviada. Firmware anterior continua aceito: nesse caso o painel informa a ausência dessa telemetria. A versão confirmada é consultada diretamente no banco, mesmo fora das 30 configurações recentes. Offline, os dados são identificados como última informação recebida.
 
 Os botões **Automático / Ligado / Desligado** enviam uma configuração completa baseada nos últimos parâmetros enviados, alterando apenas o modo dessa intenção. Sem envio anterior, usam os padrões do firmware. As demais edições ainda não enviadas permanecem no formulário e não são publicadas por esses botões. A confirmação continua dependendo do ESP32.
 
-Administração permite **Carregar mais** em eventos, chamados, comandos e configurações, em páginas de 100 registros. Ao consultar páginas antigas, atualizações ao vivo preservam a consulta; **Atualizar consulta** retorna aos registros mais recentes. Eventos têm filtros por tipo/período e detalhes de identificação. Chamados mostram abertura e acionamentos; comandos mostram resultado, motivo e validade; configurações mostram versões e parâmetros. Boot, sequência, tempo em execução, persistência e perdas aparecem nos diagnósticos. Esses valores refletem a última telemetria recebida, não estimativas do navegador.
+Administração permite **Carregar mais** em eventos, chamados, comandos e configurações, em páginas de 100 registros. Ao consultar páginas antigas, atualizações ao vivo preservam a consulta; **Atualizar consulta** retorna aos registros mais recentes. Eventos têm filtros por tipo/período e detalhes de identificação. Escolha Dispositivo selecionado ou Todos os dispositivos; todas as listas identificam o leito/deviceId. Chamados mostram abertura e acionamentos; comandos mostram resultado, motivo e validade; configurações mostram versões e parâmetros. Boot, sequência, tempo em execução, persistência e perdas aparecem nos diagnósticos. Esses valores refletem a última telemetria recebida, não estimativas do navegador.
 
 ## Circuito e controle local
 
@@ -159,42 +184,21 @@ Padrões: `AUTO`, brilho **30%**, prazo **30 s**, agenda **22:00–06:00**, São
 
 Sem relógio válido, `AUTO` aceita movimento o dia todo e informa `clockValid=false`. O botão funciona a qualquer hora, inclusive com luz desligada. Debounce: 50 ms. Pedido pendente: LED alterna a cada 500 ms e buzzer toca 100 ms a cada 5 s. Reconhecido: LED aceso e buzzer silencioso.
 
-Monitor serial, 115200 baud:
+A operação e a apresentação estão no [manual da interface](docs/manual.md). Comandos do monitor serial (115200 baud), relógio de teste, reinício e ensaios locais ficam exclusivamente no [manual do serial](docs/serial.md).
 
-```text
-auto
-on
-off
-brilho 30
-tempo 30
-agenda 22:00 06:00
-fuso -3
-hora 21:59
-hora real
-hora invalida
-reconhecer
-encerrar
-status
-ajuda
-reiniciar
-rede off
-rede on
-```
-
-Brilho aceita 1–100%, prazo 1–600 s, e `fuso` aceita inteiro −12..+14. A configuração remota usa `America/Sao_Paulo`, mapeado para UTC−3 sem regras de horário de verão. `hora HH:MM` congela o relógio para testar agenda; `hora invalida` simula falha. Ambos impedem comandos remotos: use `hora real` e aguarde NTP antes de atender pelo painel. Reconhecimento/encerramento seriais são controles locais de teste.
-
-Configuração e chamado ativo são gravados em NVS. Teste primeiro com `reiniciar`; parar e reabrir o Wokwi é outro cenário, pois a persistência depende do simulador. A fila de eventos e o contador de perdas estão em RAM e desaparecem no reboot.
+Configuração e chamado ativo são NVS; fila e contador de perdas são RAM e desaparecem no reboot. Reinício do firmware e parar/reabrir o Wokwi são ensaios distintos, pois a preservação da flash depende do simulador.
 
 ## Testes automatizados e compilação
 
 ```bash
+python3 scripts/test-prepare.py
 bash scripts/test-backend.sh
 bash scripts/test-demo.sh
 bash scripts/test-integration.sh
 bash -n scripts/demo.sh scripts/setup.sh scripts/test-backend.sh scripts/test-demo.sh scripts/test-integration.sh
 ```
 
-Os testes usam Node 22 em Docker. `test-demo.sh` cria broker anônimo **isolado, sem publicar portas**, backend e SQLite temporários; verifica dashboard servido, WebSocket, configuração confirmada, ajuda/reconhecimento/encerramento, deduplicação, relógio inválido e recuperação de presença. `test-integration.sh` valida a alternativa TLS, autenticação, ACL, Last Will e persistência após reinício. Ambos usam clientes MQTT que representam o dispositivo; não executam o firmware. Os scripts removem seus próprios contêineres/volumes e preservam diagnóstico em `.validation/`.
+Os testes usam Node 22 em Docker. `test-demo.sh` também valida dois dispositivos com movimento, configuração, chamados e presença independentes. `test-prepare.py` verifica geração/repetição de pacotes e recusa de sobrescrita incompatível. `test-demo.sh` cria broker anônimo **isolado, sem publicar portas**, backend e SQLite temporários; verifica dashboard servido, WebSocket, configuração confirmada, ajuda/reconhecimento/encerramento, deduplicação, relógio inválido e recuperação de presença. `test-integration.sh` valida a alternativa TLS, autenticação, ACL, Last Will e persistência após reinício. Ambos usam clientes MQTT que representam o dispositivo; não executam o firmware. Os scripts removem seus próprios contêineres/volumes e preservam diagnóstico em `.validation/`.
 
 Para compilar localmente, instale PlatformIO Core **6.1.18**:
 
@@ -207,7 +211,7 @@ pio run -e esp32dev
 
 O ambiente fixa `espressif32@6.12.0`, Arduino ESP32 2.0.17 e ArduinoJson 7.4.2. O pacote gerado inclui `wokwi.toml` com o binário demo para uso opcional da extensão VS Code; o caminho principal é o navegador gratuito. A variante ESP-IDF 5 do código não está validada.
 
-A [auditoria e o roteiro completo de validação](docs/VALIDACAO.md) relacionam capacidades, acesso, cenários normais/anormais e pendências. Cobrem comandos seriais, circuito, interface, API, MQTT, persistência, falhas e operação. Cada teste inclui resultados esperados e restauração. Compilação e cliente MQTT não substituem testes do circuito no Wokwi.
+O [manual da interface e roteiro do pitch](docs/manual.md) é o foco da apresentação: visão geral, descoberta, dois chamados e atendimento independente. O [manual do serial](docs/serial.md) contém exclusivamente comandos e ensaios do terminal. A [auditoria técnica](docs/auditoria.md) cobre contratos, migração, segurança, persistência e falhas. Os documentos separam resultados esperados de evidências efetivas. Compilação e cliente MQTT não substituem testes do circuito no Wokwi.
 
 ## API e tópicos MQTT
 
@@ -216,7 +220,7 @@ Na demo, exemplos funcionam sem token:
 ```bash
 curl -fsS http://localhost:3000/api/status
 curl -fsS 'http://localhost:3000/api/events?limit=20&type=HELP_OPENED'
-curl -fsS -X POST http://localhost:3000/api/config \
+curl -fsS -X POST http://localhost:3000/api/devices/nightcare-001/config \
   -H 'Content-Type: application/json' \
   -d '{"mode":"AUTO","brightnessPct":55,"offDelaySec":5,"startTime":"00:00","endTime":"00:00","timezone":"America/Sao_Paulo"}'
 ```
@@ -226,8 +230,15 @@ curl -fsS -X POST http://localhost:3000/api/config \
 | `GET /health/live` | processo HTTP ativo |
 | `GET /health/ready` | SQLite e conexão MQTT; 503 sem broker |
 | `GET /ui-config` | informa se o modo demo está ativo |
-| `GET /api/status` | dispositivo, configuração aplicada/chamado ativo consultados diretamente, listas recentes e contador de eventos |
-| `GET /api/events?limit=100&type=...&from=...&to=...` | histórico em array; datas ISO UTC, limite 1–500 |
+| `GET /api/status`, `/ws` | visão global: `devices`, `beds`, `snapshots` por deviceId, `brokerConnected` |
+| `GET /api/devices`, `/api/beds` | dispositivos encontrados e leitos associados |
+| `POST /api/devices/:deviceId/assign` | `{ "name": "Leito 2" }`, HTTP 201 ao associar |
+| `PATCH /api/beds/:id` | `{ "name": "Leito B" }`, corrige nome; não aceita trocar deviceId |
+| `GET /api/devices/:deviceId/status` | estado e listas recentes do dispositivo |
+| `GET /api/devices/:deviceId/events`, `/requests`, `/commands`, `/configs` | consultas isoladas; paginação e filtros de eventos |
+| `POST /api/devices/:deviceId/config`, `/commands` | intenções destinadas explicitamente ao dispositivo |
+| `GET /api/devices/:deviceId/commands/:id` | resultado daquele comando naquele dispositivo |
+| `GET /api/events?limit=100&type=...&from=...&to=...` (legado, um leito) | histórico em array; datas ISO UTC, limite 1–500 |
 | `GET /api/events?page=true&limit=100&cursor=...` | eventos paginados; aceita os mesmos filtros |
 | `GET /api/requests`, `/api/commands`, `/api/configs` | históricos paginados; `limit` e `cursor` opcionais |
 | `POST /api/config` | configuração completa; backend atribui versão crescente |
@@ -235,20 +246,22 @@ curl -fsS -X POST http://localhost:3000/api/config \
 | `GET /api/commands/:id` | resultado da intenção |
 | `GET /ws` com upgrade WebSocket | `{type:"snapshot",data:...}` inicial e ao mudar dados |
 
-Para comandos manuais, copie o requestId ativo de `/api/status`. Use um ID novo por intenção e repita o mesmo corpo/ID apenas para repetir a mesma intenção:
+Para comandos manuais, copie o requestId ativo de `/api/devices/:deviceId/status` e use sempre a rota do mesmo dispositivo. Use um ID novo por intenção e repita o mesmo corpo/ID apenas para repetir a mesma intenção:
 
 ```bash
-curl -fsS -X POST http://localhost:3000/api/commands \
+curl -fsS -X POST http://localhost:3000/api/devices/nightcare-001/commands \
   -H 'Content-Type: application/json' \
   -d '{"commandId":"demo-ack-001","requestId":"ID_ATIVO","action":"ACK_HELP"}'
-curl -fsS http://localhost:3000/api/commands/demo-ack-001
+curl -fsS http://localhost:3000/api/devices/nightcare-001/commands/demo-ack-001
 ```
 
 Aguarde `APPLIED` e `ACKNOWLEDGED` no estado; depois envie `CLOSE_HELP` com outro commandId. HTTP 400 indica entrada inválida; 409 indica conflito, offline, relógio inválido ou transição incompatível. Painel, API e WebSocket não exigem login, token nem mensagem de autenticação, inclusive na modalidade com MQTT TLS. `API_TOKEN` de uma configuração antiga é ignorado; não é necessário regenerar credenciais nem apagar volumes. A API continua publicada apenas em `127.0.0.1` pelo Compose.
 
-Consultas paginadas retornam `{items,nextCursor}`. Quando `nextCursor` for diferente de `null`, envie-o como `cursor` preservando os filtros. A ordenação é decrescente por recebimento/ID nos eventos, abertura/ID nos chamados, criação/ID nos comandos e versão nas configurações. As coleções de chamados, comandos e configurações sempre usam esse formato; eventos sem `page=true` e sem cursor preservam o array anterior. Cursor inválido, cursor de outra coleção/filtros e período invertido retornam HTTP 400. A paginação não congela resultados: novas inserções e alterações podem ocorrer durante a leitura; use Atualizar consulta para recuperar o estado recente.
+As rotas antigas de configuração, comandos e histórico sem deviceId só funcionam com **um único leito associado**; retornam `409 DEVICE_REQUIRED` com zero ou vários leitos. `/api/status` e `/ws` sempre entregam a visão global; os campos singulares anteriores só aparecem com um único leito associado. Para consulta global explícita, use `/api/events?scope=all`, `/api/requests?scope=all`, `/api/commands?scope=all` e `/api/configs?scope=all`. Não use `scope=all` em uma rota já delimitada por dispositivo.
 
-Todos os tópicos abaixo usam o prefixo da instalação. Payloads preservam `schemaVersion:1` e `deviceId:"nightcare-001"`.
+Consultas paginadas retornam `{items,nextCursor}`. Quando `nextCursor` for diferente de `null`, envie-o como `cursor` preservando os filtros. A ordenação é decrescente por recebimento/ID nos eventos, abertura/ID nos chamados, criação/ID nos comandos e versão nas configurações; consultas globais também usam deviceId para desempatar. As coleções de chamados, comandos e configurações sempre usam esse formato; eventos sem `page=true` e sem cursor preservam o array anterior. Cursor inválido, cursor de outro dispositivo/consulta global/coleção/filtros e período invertido retornam HTTP 400. A paginação não congela resultados: novas inserções e alterações podem ocorrer durante a leitura; use Atualizar consulta para recuperar o estado recente.
+
+Todos os tópicos abaixo usam o prefixo da instalação. Payloads preservam `schemaVersion:1` e identificam seu próprio `deviceId`, que deve corresponder ao tópico. O backend assina `+/events`, `+/state`, `+/availability` e `+/acks` sob o namespace configurado; comandos são publicados apenas para o ID de destino.
 
 | Sufixo | Direção | QoS | Retido |
 | --- | --- | --- | --- |
@@ -259,7 +272,7 @@ Todos os tópicos abaixo usam o prefixo da instalação. Payloads preservam `sch
 | `commands` | backend → ESP32 | 1 | não |
 | `acks` | ESP32 → backend | 1 | não |
 
-Eventos têm eventId exclusivo por dispositivo/boot/contador, tipo, uptime, requestId quando aplicável e horário UTC ou `null`. SQLite deduplica pelo eventId. O estado inclui boot, sequência, uptime, modo, luz, brilho, movimento, assistência, acionamentos, relógio, versão aplicada, perdas e persistência. Atualize primeiro o backend/interface e depois os arquivos Wokwi; um backend antigo pode rejeitar campos novos. O objeto opcional `runtimeSettings` inclui `offDelaySec`, `startTime`, `endTime` e `timezoneOffsetHours` (−12..+14). Configurações inválidas ou antigas são rejeitadas integralmente; repetição igual não regrava NVS. Comandos repetidos não repetem transições; pedido e resultado são gravados atomicamente na NVS com diário dos últimos 16 comandos.
+Eventos têm eventId exclusivo por dispositivo/boot/contador, tipo, uptime, requestId quando aplicável e horário UTC ou `null`. SQLite deduplica por `(deviceId,eventId)`. IDs de chamados/comandos e versões também são separados por dispositivo; ACK de um não confirma intenção de outro. O estado inclui boot, sequência, uptime, modo, luz, brilho, movimento, assistência, acionamentos, relógio, versão aplicada, perdas e persistência. Atualize primeiro o backend/interface e depois os arquivos Wokwi; um backend antigo pode rejeitar campos novos. O objeto opcional `runtimeSettings` inclui `offDelaySec`, `startTime`, `endTime` e `timezoneOffsetHours` (−12..+14). Configurações inválidas ou antigas são rejeitadas integralmente; repetição igual não regrava NVS. Comandos repetidos não repetem transições; pedido e resultado são gravados atomicamente na NVS com diário dos últimos 16 comandos.
 
 ## Operação, desenvolvimento e alternativa TLS
 
@@ -284,7 +297,15 @@ docker compose up --build -d
 
 Ela exige DNS/IPv4 acessível e TCP 8883; gera CA, certificado SAN para host e `mosquitto`, usuários MQTT separados. O script recusa sobrescrever `.env`, `secrets/` ou `mqtt_secrets.h`. Para o firmware TLS, use `Wokwi/sketch.ino`, circuito, bibliotecas e `mqtt_secrets.h`, com `#define NIGHTCARE_DEMO 0` na primeira linha para selecionar TLS explicitamente; esse caminho não usa o pacote `Wokwi/demo/`. TLS valida CA, hostname e data; não usa aceitação indiscriminada de certificados. A API permanece local, sem autenticação HTTP; em servidor remoto, pode ser acessada por túnel SSH. TLS e ACL aqui protegem a conexão MQTT; não acrescentam HTTPS ou login ao painel. Não publique credenciais reais em projetos Wokwi compartilhados.
 
-Faça backup de SQLite com backend parado ou pela API de backup do SQLite; não ignore o WAL ao copiar um banco em uso. O projeto continua limitado a um dispositivo, UTC−3 fixo e eventos pendentes em RAM. Uma luminária física exige circuito de potência e alimentação apropriados; o LED representa essa saída na simulação.
+Para acrescentar um dispositivo na modalidade TLS já preparada:
+
+```bash
+bash scripts/provision-device.sh nightcare-002
+```
+
+O script gera senha individual e `Wokwi/tls/nightcare-002/mqtt_secrets.h`, preservando CA, certificado e senhas existentes, e solicita reload do Mosquitto. Copie esse header junto ao sketch/circuito/bibliotecas em uma simulação TLS separada e selecione `NIGHTCARE_DEMO=0` explicitamente conforme as instruções acima. O diretório é ignorado pelo Git e pelo build Docker. Se o broker ainda não estiver iniciado, use `--no-reload` e inicie/recarregue depois. Para instalações anteriores, atualize o arquivo ACL antes de provisionar: regras por usuário limitam cada dispositivo a `nightcare/<seu-ID>/...`; o backend usa assinaturas por instalação. Provisionar credencial MQTT não associa automaticamente um leito.
+
+Faça backup de SQLite com backend parado ou pela API de backup do SQLite; não ignore o WAL ao copiar um banco em uso. O projeto atende vários leitos na mesma instalação, sem associação de pacientes ou transferência de dispositivos entre leitos. Permanecem o UTC−3 remoto fixo e eventos pendentes em RAM. Uma luminária física exige circuito de potência e alimentação apropriados; o LED representa essa saída na simulação.
 
 ## Interface única e ambiente Nix
 

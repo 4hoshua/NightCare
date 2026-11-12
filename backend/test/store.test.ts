@@ -1,8 +1,21 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { Store } from "../src/store.js";
+import { Store as BaseStore } from "../src/store.js";
 import { buildApp } from "../src/app.js";
 import { PREFIX, DEVICE, settingsSchema } from "../src/contracts.js";
+
+// Existing single-device cases use a pre-associated installation fixture.
+class Store extends BaseStore {
+  constructor(...args: ConstructorParameters<typeof BaseStore>) {
+    super(...args);
+    this.db.prepare("INSERT INTO devices(device_id) VALUES (?)").run(DEVICE);
+    this.db
+      .prepare(
+        "INSERT INTO beds(name,name_key,device_id,created_at) VALUES (?,?,?,?)",
+      )
+      .run("Leito 1", "leito 1", DEVICE, this.now());
+  }
+}
 
 const settings = {
   mode: "AUTO" as const,

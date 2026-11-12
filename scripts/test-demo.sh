@@ -40,3 +40,5 @@ PY
 bash scripts/test-backend.sh
 docker compose -p "$project" -f "$work/compose.yml" up --build -d --wait --wait-timeout 120
 docker run --rm --network "${project}_default" -e MQTT_URL=mqtt://broker:1883 -e MQTT_PREFIX=nightcare/demo/test/nightcare-001/ nightcare-backend-test node /app/demo-integration.mjs
+
+docker run --rm --network "${project}_default" -e MQTT_URL=mqtt://broker:1883 -e MQTT_PREFIX=nightcare/demo/test/ nightcare-backend-test node /app/multi-device-integration.mjs

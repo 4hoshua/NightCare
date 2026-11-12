@@ -14,7 +14,7 @@ python3 - "$root" "$work" <<'PY'
 from pathlib import Path
 import shutil,sys,json
 root,work=map(Path,sys.argv[1:])
-for name in ['scripts/setup.sh','mosquitto/mosquitto.conf','mosquitto/acl']:
+for name in ['scripts/setup.sh','scripts/provision-device.sh','mosquitto/mosquitto.conf','mosquitto/acl']:
  target=work/name;target.parent.mkdir(parents=True,exist_ok=True);shutil.copyfile(root/name,target)
 (work/'Wokwi').mkdir()
 s=(root/'compose.yml').read_text().replace('context: .','context: '+json.dumps(str(root)))
@@ -22,6 +22,7 @@ s=s.replace('    ports:\n      - "8883:8883"\n','').replace('    ports:\n      -
 (work/'compose.yml').write_text(s)
 PY
 bash "$work/scripts/setup.sh" mqtt.nightcare.test
+bash "$work/scripts/provision-device.sh" nightcare-002 --no-reload
 bash scripts/test-backend.sh
 docker compose -p "$project" -f "$work/compose.yml" up --build -d --wait --wait-timeout 120
 docker run --rm --network "${project}_default" -v "$work:/run/validation:ro" nightcare-backend-test node /app/integration.mjs

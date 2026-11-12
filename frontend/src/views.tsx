@@ -424,6 +424,7 @@ type LightingProps = LiveProps & {
   change: <K extends keyof Settings>(key: K, value: Settings[K]) => void;
   save: (e: FormEvent) => void;
   quickMode: (mode: Settings["mode"]) => void;
+  canConfigure: boolean;
 };
 export function LightingView({
   snapshot,
@@ -434,6 +435,7 @@ export function LightingView({
   change,
   save,
   quickMode,
+  canConfigure,
 }: LightingProps) {
   const state = snapshot?.device.state;
   return (
@@ -480,7 +482,10 @@ export function LightingView({
             </div>
             <Icon name="settings" />
           </div>
-          <fieldset className="quick-modes" disabled={saving || !connected}>
+          <fieldset
+            className="quick-modes"
+            disabled={saving || !connected || !canConfigure}
+          >
             <legend>Troca rápida de modo</legend>
             <div className="actions">
               {(["AUTO", "ON", "OFF"] as const).map((mode) => (
@@ -564,7 +569,7 @@ export function LightingView({
               São Paulo · UTC−3. Horários iguais habilitam 24 h. O botão de
               ajuda funciona a qualquer hora.
             </p>
-            <button disabled={saving || !connected}>
+            <button disabled={saving || !connected || !canConfigure}>
               {saving ? "Enviando…" : "Enviar configuração"}
             </button>
             {dirty && (
@@ -712,6 +717,7 @@ type AdminProps = LiveProps & {
   historyError: string;
   demo: boolean | null;
   historyRecords: Records<EventRow>;
+  deviceNames: Record<string, string>;
 };
 export function AdminView({
   snapshot,
@@ -722,6 +728,7 @@ export function AdminView({
   historyError,
   demo,
   historyRecords,
+  deviceNames,
 }: AdminProps) {
   const state = snapshot?.device.state;
   return (
@@ -739,7 +746,7 @@ export function AdminView({
           <dl className="detail-list">
             <div>
               <dt>Dispositivo</dt>
-              <dd className="mono">nightcare-001</dd>
+              <dd className="mono">{snapshot?.device.deviceId ?? "—"}</dd>
             </div>
             <div>
               <dt>Comunicação MQTT</dt>
@@ -889,6 +896,7 @@ export function AdminView({
           <table>
             <thead>
               <tr>
+                <th>Leito / dispositivo</th>
                 <th>Recebido em</th>
                 <th>Evento</th>
                 <th>Chamado</th>
@@ -898,7 +906,8 @@ export function AdminView({
             </thead>
             <tbody>
               {events.map((e) => (
-                <tr key={e.event_id}>
+                <tr key={`${e.device_id}/${e.event_id}`}>
+                  <td>{deviceNames[e.device_id] ?? e.device_id}</td>
                   <td>{date(e.received_at)}</td>
                   <td>{eventNames[e.type] ?? e.type}</td>
                   <td className="request">{e.request_id ?? "—"}</td>
