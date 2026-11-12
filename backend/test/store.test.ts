@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import { Store } from '../src/store.js';
 import { buildApp } from '../src/app.js';
 import { PREFIX, DEVICE, settingsSchema } from '../src/contracts.js';
+
 const settings = {
   mode: 'AUTO' as const,
   brightnessPct: 30,
@@ -11,6 +12,7 @@ const settings = {
   endTime: '06:00',
   timezone: 'America/Sao_Paulo' as const,
 };
+
 const state = {
   schemaVersion: 1,
   deviceId: DEVICE,
@@ -29,6 +31,7 @@ const state = {
   droppedEvents: 0,
   persistenceOk: true,
 };
+
 const event = {
   schemaVersion: 1,
   deviceId: DEVICE,
@@ -40,9 +43,11 @@ const event = {
   requestId: 'request-a',
   pressCount: 1,
 };
+
 function ingest(s: Store, topic: string, payload: unknown, retained = false) {
   s.ingest(PREFIX + topic, Buffer.from(JSON.stringify(payload)), retained);
 }
+
 test('event redelivery is deduplicated and cannot regress closed requests', () => {
   const s = new Store(':memory:');
   try {
@@ -60,6 +65,7 @@ test('event redelivery is deduplicated and cannot regress closed requests', () =
     s.close();
   }
 });
+
 test('retained state does not establish liveness; heartbeat expires after 45s', () => {
   let now = 100000;
   const s = new Store(':memory:', () => now);
@@ -81,6 +87,7 @@ test('retained state does not establish liveness; heartbeat expires after 45s', 
     s.close();
   }
 });
+
 test('configurations are atomic, monotonic, durable desired intent and application confirmation', async () => {
   const s = new Store(':memory:');
   try {
@@ -109,6 +116,7 @@ test('configurations are atomic, monotonic, durable desired intent and applicati
     s.close();
   }
 });
+
 test('commands correlate ACK, reject mismatched IDs, timeout at 10s, replay only before expiry', async () => {
   let now = 1700000000000;
   const s = new Store(':memory:', () => now);
@@ -166,6 +174,7 @@ test('commands correlate ACK, reject mismatched IDs, timeout at 10s, replay only
     s.close();
   }
 });
+
 test('API auth, input bounds, conflict and accepted status; health separates broker readiness', async () => {
   const s = new Store(':memory:');
   const token = 'a'.repeat(64);

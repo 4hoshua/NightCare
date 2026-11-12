@@ -11,7 +11,9 @@ import {
   type Settings,
   type CommandInput,
 } from './contracts.js';
+
 export type Publisher = (topic: string, payload: string, retained: boolean) => Promise<void>;
+
 export class Store {
   db: Database.Database;
   publish?: Publisher;
@@ -33,11 +35,14 @@ export class Store {
     `);
     this.db.prepare('INSERT OR IGNORE INTO devices(device_id) VALUES (?)').run(DEVICE);
   }
+
   markDisconnected() {
     this.db.prepare("UPDATE devices SET availability='offline'").run();
   }
+
   device() {
     const row = this.db.prepare('SELECT * FROM devices WHERE device_id=?').get(DEVICE) as any;
+
     return {
       deviceId: DEVICE,
       state: row.state ? JSON.parse(row.state) : null,
@@ -48,12 +53,15 @@ export class Store {
         this.now() - row.state_seen < 45000,
     };
   }
+
   ingest(topic: string, raw: Buffer, retained = false) {
     if (raw.length > 8192 || !topic.startsWith(PREFIX))
       throw new Error('invalid topic/payload size');
+
     const input = JSON.parse(raw.toString());
     const suffix = topic.slice(PREFIX.length);
     const now = this.now();
+
     this.db.transaction(() => {
       if (suffix === 'events') {
         if (retained) throw new Error('retained event');
@@ -61,6 +69,7 @@ export class Store {
         const result = this.db
           .prepare('INSERT OR IGNORE INTO events VALUES (?,?,?,?,?,?,?)')
           .run(e.eventId, DEVICE, e.type, e.requestId, e.occurredAt, now, JSON.stringify(e));
+
         if (result.changes && e.requestId) {
           // Event replay contributes history; current device state is authoritative for active requests.
           const status =
@@ -69,6 +78,7 @@ export class Store {
               : e.type === 'HELP_ACKNOWLEDGED'
                 ? 'ACKNOWLEDGED'
                 : 'PENDING';
+
           this.db
             .prepare(
               `INSERT INTO assistance_requests VALUES (?,?,?,?) ON CONFLICT(request_id) DO UPDATE SET
@@ -81,6 +91,7 @@ export class Store {
       } else if (suffix === 'state') {
         const s = stateSchema.parse(input);
         const old = this.device().state;
+
         if (old?.bootId === s.bootId && s.sequence <= old.sequence) return;
         // Retained state is a snapshot, never proof that the device is online now.
         this.db
@@ -94,12 +105,14 @@ export class Store {
             retained ? 'offline' : 'online',
             DEVICE,
           );
+
         if (s.requestId)
           this.db
             .prepare(
               `INSERT INTO assistance_requests VALUES (?,?,?,?) ON CONFLICT(request_id) DO UPDATE SET status=excluded.status,press_count=excluded.press_count,updated_at=excluded.updated_at`,
             )
             .run(s.requestId, s.assistanceStatus, s.pressCount, now);
+
         this.db
           .prepare(
             "UPDATE device_configs SET status='APPLIED',reason='STATE_CONFIRMED' WHERE config_version=?",
@@ -107,18 +120,23 @@ export class Store {
           .run(s.appliedConfigVersion);
       } else if (suffix === 'availability') {
         const a = availabilitySchema.parse(input);
+
         if (a.status === 'offline' || !retained)
           this.db
             .prepare('UPDATE devices SET availability=?,last_seen=? WHERE device_id=?')
             .run(a.status, now, DEVICE);
       } else if (suffix === 'acks') {
         if (retained) throw new Error('retained ack');
+
         const a = ackSchema.parse(input);
+
         if (a.commandId) {
           const row = this.db
             .prepare('SELECT * FROM commands WHERE command_id=?')
             .get(a.commandId) as any;
+
           if (!row || a.requestId !== row.request_id) throw new Error('uncorrelated ack');
+
           this.db
             .prepare(
               "UPDATE commands SET status=?,reason=? WHERE command_id=? AND status IN ('PENDING','UNCONFIRMED')",
@@ -133,12 +151,14 @@ export class Store {
       } else throw new Error('unsupported topic');
     })();
   }
+
   configs() {
     return this.db
       .prepare('SELECT * FROM device_configs ORDER BY config_version DESC LIMIT 30')
       .all()
       .map((x: any) => ({ ...x, payload: JSON.parse(x.payload) }));
   }
+
   async setConfig(input: Settings) {
     const settings = settingsSchema.parse(input);
     const payload = this.db.transaction(() => {
@@ -154,29 +174,38 @@ export class Store {
         deviceId: DEVICE,
         configVersion: Math.max(version, applied + 1),
       });
+
       this.db
         .prepare('INSERT INTO device_configs(config_version,payload,created_at) VALUES (?,?,?)')
         .run(p.configVersion, JSON.stringify(p), this.now());
+
       return p;
     })();
+
     void this.tryPublish('config/set', JSON.stringify(payload), true);
+
     return payload;
   }
+
   async command(input: CommandInput) {
     const old = this.db
       .prepare('SELECT * FROM commands WHERE command_id=?')
       .get(input.commandId) as any;
+
     if (old) {
       if (old.request_id !== input.requestId || old.action !== input.action)
         throw new Error('ID_CONFLICT');
+
       return this.commandView(old);
     }
+
     const d = this.device();
     if (!d.online) throw new Error('DEVICE_OFFLINE');
     if (!d.state.clockValid) throw new Error('CLOCK_INVALID');
     if (d.state.requestId !== input.requestId) throw new Error('REQUEST_MISMATCH');
     if (d.state.assistanceStatus !== (input.action === 'ACK_HELP' ? 'PENDING' : 'ACKNOWLEDGED'))
       throw new Error('INVALID_TRANSITION');
+
     const now = this.now();
     const expires = now + 60000;
     const p = {
@@ -186,14 +215,18 @@ export class Store {
       issuedAt: new Date(now).toISOString(),
       expiresAt: new Date(expires).toISOString(),
     };
+
     this.db
       .prepare(
         'INSERT INTO commands(command_id,request_id,action,payload,created_at,expires_at) VALUES (?,?,?,?,?,?)',
       )
       .run(input.commandId, input.requestId, input.action, JSON.stringify(p), now, expires);
+
     void this.tryPublish('commands', JSON.stringify(p), false);
+
     return this.getCommand(input.commandId);
   }
+
   commandView(row: any) {
     return {
       ...row,
@@ -204,10 +237,13 @@ export class Store {
           : row.status,
     };
   }
+
   getCommand(id: string) {
     const r = this.db.prepare('SELECT * FROM commands WHERE command_id=?').get(id);
+
     return r ? this.commandView(r) : null;
   }
+
   tick() {
     this.db
       .prepare(
@@ -215,6 +251,7 @@ export class Store {
       )
       .run(this.now() - 10000);
   }
+
   async tryPublish(suffix: string, payload: string, retain: boolean) {
     try {
       await this.publish?.(PREFIX + suffix, payload, retain);
@@ -222,18 +259,23 @@ export class Store {
       /* persisted intent is replayed on reconnect */
     }
   }
+
   async replay() {
     const cfg = this.db
       .prepare('SELECT payload FROM device_configs ORDER BY config_version DESC LIMIT 1')
       .get() as any;
+
     if (cfg) await this.tryPublish('config/set', cfg.payload, true);
+
     for (const c of this.db
       .prepare(
         "SELECT payload FROM commands WHERE status IN ('PENDING','UNCONFIRMED') AND expires_at>?",
       )
       .all(this.now()) as any[])
+
       await this.tryPublish('commands', c.payload, false);
   }
+
   history(query: { limit?: number; type?: string; from?: string; to?: string }) {
     return this.db
       .prepare(
@@ -250,6 +292,7 @@ export class Store {
       )
       .map((x: any) => ({ ...x, payload: JSON.parse(x.payload) }));
   }
+
   snapshot() {
     return {
       device: this.device(),
@@ -262,7 +305,9 @@ export class Store {
       ).map((x) => this.commandView(x)),
     };
   }
+
   close() {
     this.db.close();
   }
+
 }

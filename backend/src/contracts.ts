@@ -1,6 +1,8 @@
 import { z } from 'zod';
+
 export const DEVICE = 'nightcare-001';
 export const PREFIX = `nightcare/${DEVICE}/`;
+
 const id = z
   .string()
   .min(1)
@@ -9,6 +11,7 @@ const id = z
 const iso = z.iso.datetime();
 const base = { schemaVersion: z.literal(1), deviceId: z.literal(DEVICE) };
 const hhmm = z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/);
+
 export const settingsSchema = z
   .object({
     mode: z.enum(['AUTO', 'ON', 'OFF']),
@@ -19,10 +22,12 @@ export const settingsSchema = z
     timezone: z.literal('America/Sao_Paulo'),
   })
   .strict();
+
 export const configSchema = settingsSchema.extend({
   ...base,
   configVersion: z.number().int().min(1).max(2147483647),
 });
+
 export const eventSchema = z
   .object({
     ...base,
@@ -48,6 +53,7 @@ export const eventSchema = z
   })
   .strict()
   .refine((v) => !v.type.startsWith('HELP_') || v.requestId !== null);
+
 export const stateSchema = z
   .object({
     ...base,
@@ -68,9 +74,11 @@ export const stateSchema = z
   })
   .strict()
   .refine((v) => (v.assistanceStatus === 'NONE') === (v.requestId === null));
+
 export const availabilitySchema = z
   .object({ ...base, status: z.enum(['online', 'offline']) })
   .strict();
+
 export const ackSchema = z
   .object({
     ...base,
@@ -82,8 +90,10 @@ export const ackSchema = z
   })
   .strict()
   .refine((v) => Boolean(v.commandId) !== Boolean(v.configVersion));
+
 export const commandInput = z
   .object({ commandId: id, requestId: id, action: z.enum(['ACK_HELP', 'CLOSE_HELP']) })
   .strict();
+
 export type Settings = z.infer<typeof settingsSchema>;
 export type CommandInput = z.infer<typeof commandInput>;
