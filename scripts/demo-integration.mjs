@@ -45,6 +45,11 @@ if(process.argv[2]==='serve'){
   await until(async()=>(await api('/api/status')).data.device.online);
   assert.equal((await api('/ui-config')).data.demo,true);
   const document=await fetch(origin);assert.equal(document.status,200);assert.match(await document.text(),/NightCare/);
+  const alternate=await fetch(origin+'/dashboard/');assert.equal(alternate.status,200);
+  const alternateHtml=await alternate.text();assert.match(alternateHtml,/NightCare/);
+  const alternateAsset=alternateHtml.match(/src="(\/dashboard\/assets\/[^"]+)"/);
+  assert.ok(alternateAsset,'Alternate dashboard assets must use their own prefix');
+  assert.equal((await fetch(origin+alternateAsset[1])).status,200);
   ws=new WebSocket(origin.replace('http','ws')+'/ws');let snapshot;ws.on('message',r=>{snapshot=JSON.parse(r.toString()).data;});await until(()=>snapshot?.device.online);
   const original=(await api('/api/status')).data.eventCount;const duplicate=event('HELP_REITERATED','duplicate');await publish('events',duplicate);await publish('events',duplicate);
   await until(async()=>(await api('/api/status')).data.eventCount===original+1);

@@ -1,4 +1,4 @@
-FROM node:22.21.1-bookworm-slim AS dashboard
+FROM node:22.21.1-bookworm-slim AS frontend
 WORKDIR /ui
 COPY frontend/package*.json ./
 RUN npm ci
@@ -12,6 +12,12 @@ RUN npm ci
 COPY backend/tsconfig.json ./
 COPY backend/src ./src
 RUN npm run build
+FROM node:22.21.1-bookworm-slim AS dashboard
+WORKDIR /dashboard
+COPY dashboard/package*.json ./
+RUN npm ci
+COPY dashboard/ ./
+RUN npm run build -- --base=/dashboard/
 FROM build AS test
 COPY backend/test ./test
 COPY scripts/integration.mjs ./integration.mjs
@@ -24,8 +30,9 @@ ENV NODE_ENV=production HOST=0.0.0.0 DB_PATH=/data/nightcare.sqlite STATIC_ROOT=
 WORKDIR /app
 COPY --from=production-deps /app/node_modules ./node_modules
 COPY --from=build /app/dist ./dist
+COPY --from=dashboard /dashboard/dist ./public/dashboard
 COPY --from=build /app/package.json ./
-COPY --from=dashboard /ui/dist ./public
+COPY --from=frontend /ui/dist ./public
 RUN mkdir /data && chown node:node /data
 USER node
 EXPOSE 3000

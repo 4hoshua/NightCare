@@ -79,7 +79,8 @@ O frontend React/TypeScript é compilado com Vite e servido pelo próprio Fastif
 | Parte | Arquivos principais |
 | --- | --- |
 | Firmware e circuito | `Wokwi/sketch.ino`, `Wokwi/diagram.json` |
-| Dashboard | `frontend/src/` |
+| Dashboard principal | `frontend/src/` |
+| Dashboard alternativo do remoto | `dashboard/src/`, servido em `/dashboard/` |
 | API, MQTT e SQLite | `backend/src/` |
 | Execução gratuita | `compose.demo.yml`, `scripts/demo.sh` |
 | Alternativa com broker próprio/TLS | `compose.yml`, `mosquitto/`, `scripts/setup.sh` |
@@ -248,3 +249,9 @@ docker compose up --build -d
 Ela exige DNS/IPv4 acessível e TCP 8883; gera CA, certificado SAN para host e `mosquitto`, usuários separados e token aleatório. O script recusa sobrescrever `.env`, `secrets/` ou `mqtt_secrets.h`. Para o firmware TLS, use `Wokwi/sketch.ino`, circuito, bibliotecas e `mqtt_secrets.h`, com `#define NIGHTCARE_DEMO 0` na primeira linha para selecionar TLS explicitamente; esse caminho não usa o pacote `Wokwi/demo/`. TLS valida CA, hostname e data; não usa aceitação indiscriminada de certificados. A API permanece local e exige o token gerado; em servidor remoto, pode ser acessada por túnel SSH. Não publique credenciais reais em projetos Wokwi compartilhados.
 
 Faça backup de SQLite com backend parado ou pela API de backup do SQLite; não ignore o WAL ao copiar um banco em uso. O projeto continua limitado a um dispositivo, UTC−3 fixo e eventos pendentes em RAM. Uma luminária física exige circuito de potência e alimentação apropriados; o LED representa essa saída na simulação.
+
+## Dashboard alternativo e ambiente Nix
+
+O painel principal em `/` mantém as quatro telas, o modo gratuito e as atualizações por WebSocket. O dashboard alternativo incorporado do remoto fica em `/dashboard/`, usa consultas HTTP periódicas e solicita o token da API na modalidade TLS. No modo demo, esse formulário aceita um texto fictício, pois a API dispensa autenticação; nunca informe uma credencial real nessa modalidade. Ambos usam o mesmo backend e banco de dados.
+
+Para desenvolver o painel alternativo separadamente, execute `npm ci` e `npm run dev` na pasta `dashboard/`; o Vite encaminha `/api` para `http://127.0.0.1:3000`. O repositório também inclui `flake.nix` e `flake.lock` para o ambiente de desenvolvimento Nix.

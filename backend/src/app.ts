@@ -3,6 +3,9 @@ import websocket from '@fastify/websocket';
 import staticFiles from '@fastify/static';
 import type { WebSocket } from 'ws';
 import { timingSafeEqual } from 'node:crypto';
+import { existsSync } from 'node:fs';
+import { fileURLToPath } from 'node:url';
+import { join } from 'node:path';
 import { z } from 'zod';
 import { commandInput, settingsSchema } from './contracts.js';
 import { Store } from './store.js';
@@ -48,7 +51,12 @@ export async function buildApp(store: Store, token: string, brokerConnected: () 
   });
   app.get('/ui-config',async()=>({demo:!!options.demo}));
   app.addHook('onClose',async()=>{clearInterval(broadcast);for(const socket of sockets)socket.close(1001,'Shutdown');sockets.clear();});
-  if(options.staticRoot) await app.register(staticFiles,{root:options.staticRoot});
+  const publicDir = options.staticRoot ?? fileURLToPath(new URL('../public', import.meta.url));
+  if (existsSync(publicDir)) {
+    await app.register(staticFiles, {root:publicDir});
+    const remoteDashboard = join(publicDir, 'dashboard');
+    if (existsSync(remoteDashboard)) await app.register(staticFiles, {root:remoteDashboard,prefix:'/dashboard/',decorateReply:false});
+  }
   app.get('/health/live',async()=>({status:'ok'}));
   app.get('/health/ready',async(_,reply)=> { store.db.prepare('SELECT 1').get(); return reply.code(brokerConnected()?200:503).send({sqlite:true,mqtt:brokerConnected()}); });
   app.get('/api/status',async()=>({...store.snapshot(),brokerConnected:brokerConnected()}));
