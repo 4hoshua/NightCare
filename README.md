@@ -286,7 +286,27 @@ docker compose --env-file .env.demo -p nightcare-demo -f compose.demo.yml down
 
 `down` preserva o volume do banco. `down -v` apaga o histórico e deve ser usado apenas para descarte intencional. A disponibilidade da demo depende do broker público. Se não conectar, confira internet, saída TCP 1883, host e igualdade do prefixo nos arquivos copiados ao Wokwi. Broker conectado com dispositivo offline indica que falta estado novo do ESP32; aguarde heartbeat. NTP inválido bloqueia comandos remotos, mas não a conexão MQTT sem TLS.
 
-Para desenvolvimento sem Docker, use **Node >=22.13**; a imagem fixa **22.21.1**. SQLite nativo pode exigir Python/make/g++. Execute `npm ci --prefix backend`, `npm ci --prefix frontend`, os builds de ambos e inicie o backend com `DEMO_MODE=true`, `MQTT_URL`, `MQTT_PREFIX`, `MQTT_CLIENT_ID` da `.env.demo` e `STATIC_ROOT` apontando para o caminho absoluto de `frontend/dist`. `HOST` padrão é `127.0.0.1`, porta 3000, e `DB_PATH` padrão é `./data/nightcare.sqlite`. Execute `npm start --prefix backend`. Há somente uma instância do backend por instalação e banco.
+### Editar a interface com atualização automática no Docker
+
+```bash
+bash scripts/demo.sh --dev
+```
+
+Abra **http://localhost:5173** e edite os arquivos em `frontend/`. Ao salvar, o Vite atualiza CSS imediatamente e recarrega a página quando necessário para alterações em React/TypeScript ou HTML. Não é necessário reconstruir a imagem nem reiniciar contêineres a cada edição. Uma recarga pode perder rascunhos e a ativação de áudio da página. O monitoramento usa polling para reconhecer também edições pelo Windows/WSL com Docker Desktop. Se 5173 estiver ocupada, use `DEV_HTTP_PORT=5174 bash scripts/demo.sh --dev`.
+
+A interface de desenvolvimento encaminha API e WebSocket ao mesmo backend da demo, preservando banco, namespace e dispositivos. O endereço `http://localhost:3000` continua servindo a versão compilada na imagem; use a porta 5173 para acompanhar as edições. O primeiro início instala dependências dentro do Docker, sem exigir Node local.
+
+Para ativar somente a interface de desenvolvimento com a demo já iniciada, sem recriar o backend:
+
+```bash
+docker compose --env-file .env.demo -p nightcare-demo -f compose.demo.yml -f compose.frontend-dev.yml up --build --no-deps --renew-anon-volumes -d --wait frontend-dev
+# Parar somente a interface de desenvolvimento
+docker compose --env-file .env.demo -p nightcare-demo -f compose.demo.yml -f compose.frontend-dev.yml stop frontend-dev
+```
+
+Repita o comando de ativação após alterar `frontend/package.json` ou `frontend/package-lock.json` para reinstalar as dependências. Para parar a instalação completa incluindo essa interface, use `docker compose --env-file .env.demo -p nightcare-demo -f compose.demo.yml -f compose.frontend-dev.yml down`, sem `-v` para preservar o banco. Na modalidade TLS, use o mesmo arquivo adicional com `docker compose -f compose.yml -f compose.frontend-dev.yml up --build -d --wait`. Ambos os servidores HTTP ficam publicados apenas em loopback.
+
+Para desenvolvimento sem Docker, use **Node >=22.13**; a imagem fixa **22.21.1**. SQLite nativo pode exigir Python/make/g++. Execute `npm ci --prefix backend`, `npm ci --prefix frontend`, os builds de ambos e inicie o backend com `DEMO_MODE=true`, `MQTT_URL`, `MQTT_PREFIX`, `MQTT_CLIENT_ID` da `.env.demo` e `STATIC_ROOT` apontando para o caminho absoluto de `frontend/dist`. `HOST` padrão é `127.0.0.1`, porta 3000, e `DB_PATH` padrão é `./data/nightcare.sqlite`. Execute `npm start --prefix backend`. Há somente uma instância do backend por instalação e banco. Para usar `npm run dev --prefix frontend` fora do Docker, ajuste os destinos de proxy em `frontend/vite.config.ts` para `http://127.0.0.1:3000`.
 
 A modalidade anterior com Mosquitto próprio/TLS permanece **opcional**, separada da demo. Em uma configuração nova com um host acessível pela internet:
 

@@ -168,3 +168,10 @@ Use instância isolada para mensagens inválidas e adulterações; não publique
 - **Migração real ensaiada em cópia:** backup consistente do banco existente; migração da cópia preservou a quantidade de registros nas quatro coleções e associou o dispositivo anterior ao Leito 1. O serviço existente foi atualizado mantendo volume e namespace.
 
 **Não executado:** firmware no Wokwi ou em hardware, nem duas simulações Wokwi reais simultâneas. Compilação, clientes MQTT e ensaios de navegador não comprovam PIR, debounce, PWM, latência, NVS ou TLS/NTP do ESP32. Ensaios instrumentados e demais pendências acima continuam abertos.
+
+### Atualização automática da interface no Docker — 12/11/2026
+
+- Imagem de desenvolvimento Node 22.21.1 construída; instalação sem vulnerabilidades reportadas e build TypeScript/Vite aprovado. Sintaxe de `scripts/demo.sh` validada com `bash -n`.
+- Serviço `frontend-dev` saudável em localhost:5173, com fontes montadas do workspace e dependências isoladas em volume. API respondeu 200, `/ui-config` identificou a demo e `/ws` entregou snapshot pelo proxy.
+- Navegador confirmou alteração temporária de CSS sem recarregar a página e alteração temporária em React/TypeScript com recarga automática. Fontes restauradas e restauração observada no navegador. IDs, horários de início e contadores de reinício dos dois contêineres permaneceram iguais durante as edições; backend existente continuou saudável.
+- Polling configurado para Docker Desktop/Windows/WSL; execução efetiva realizada nesta máquina Linux com Docker Desktop. Windows/WSL continuam sem ensaio direto. Nenhum comando MQTT de teste foi publicado e nenhum firmware foi executado nesta alteração.
