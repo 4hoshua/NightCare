@@ -129,10 +129,20 @@ export function Sidebar({
     const previous = document.getElementById(triggerId);
     const previousOverflow = document.body.style.overflow;
     document.body.style.overflow = "hidden";
+    const sidebar = ref.current;
+    function focusMenu() {
+      if (!sidebar?.contains(document.activeElement))
+        sidebar?.querySelector<HTMLButtonElement>(".mobile-close")?.focus();
+    }
+    function afterOpening(event: TransitionEvent) {
+      if (event.target === sidebar && event.propertyName === "transform")
+        focusMenu();
+    }
+    sidebar?.addEventListener("transitionend", afterOpening);
     let focusFrame = requestAnimationFrame(() => {
       // Wait for the visibility transition and inert blur to reach the browser.
       focusFrame = requestAnimationFrame(() => {
-        ref.current?.querySelector<HTMLButtonElement>(".mobile-close")?.focus();
+        focusMenu();
       });
     });
     function keydown(e: KeyboardEvent) {
@@ -160,6 +170,7 @@ export function Sidebar({
     document.addEventListener("keydown", keydown);
     return () => {
       cancelAnimationFrame(focusFrame);
+      sidebar?.removeEventListener("transitionend", afterOpening);
       document.body.style.overflow = previousOverflow;
       document.removeEventListener("keydown", keydown);
       previous?.focus();
@@ -236,9 +247,9 @@ export function Sidebar({
             aria-label={collapsed ? "Expandir navegação" : "Recolher navegação"}
             aria-expanded={!collapsed}
             aria-controls={navigationId}
+            title={collapsed ? "Expandir navegação" : "Recolher navegação"}
           >
             <Icon name={collapsed ? "expand" : "collapse"} />
-            <span>Recolher menu</span>
           </button>
         </div>
       </aside>
