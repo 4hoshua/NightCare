@@ -25,6 +25,7 @@ O som é opcional: habilite por clique antes de abrir os pedidos. Evite ensaios 
 ## Regras de operação
 
 - **Dashboard:** mostra todos os leitos associados. Use **Buscar leito ou dispositivo** para filtrar os cartões por nome ou ID, sem diferenciar maiúsculas ou acentos; **Limpar busca** volta a exibir todos. A busca acontece no navegador. Dispositivos sem leito aparecem para associação e seus chamados conhecidos continuam visíveis, mesmo durante a busca.
+- **Sino de notificações:** abre a atividade de todos os dispositivos, com filtros, horários e **Ver detalhes** para ir à tela do destinatário. O contador representa o que este navegador ainda não viu; abrir a central marca as notificações existentes como vistas. Novidades posteriores voltam ao contador. Use **Atualizar** para trazer novidades à lista aberta, **Carregar mais** para consultar as anteriores e **Marcar todas como lidas** para zerar o contador. O histórico cobre os últimos 30 dias. Chamados e falhas também aparecem em avisos temporários; o som continua dedicado aos chamados.
 - **Selecionar leito ou dispositivo:** fica na faixa **Dispositivo em acompanhamento**, dentro de Iluminação e movimento, Assistência e Administração, antes dos controles. Define o destinatário dessas telas; o ID selecionado aparece ao lado. O Dashboard tem visão global, sem seletor de leito.
 - **Iluminação:** configura modo, brilho, prazo e agenda do dispositivo selecionado. Troca rápida usa a última intenção enviada ou padrões se nenhuma existir; não publica os demais campos em edição.
 - **Assistência:** um chamado ativo por dispositivo; vários dispositivos podem ter chamados simultâneos. Reconhecer precede Encerrar. Som e lista global consideram os chamados de todos os dispositivos.
@@ -163,6 +164,13 @@ Registre teste, data, executor, condição inicial, resultado observado, evidên
 - **Esperado:** nomes, vínculos, histórico e intenções preservados; presença exige estado novo. Recarga conserva chamado reconhecido no banco, sem transformá-lo em pendente por conta da navegação.
 - **Exceção:** instalação nova não inventa leitos; abre descoberta. Não oferecer exclusão/transferência de vínculo como restauração de teste.
 - **Restaurar:** aguardar reconexão, revisar configurações e encerrar somente pedidos fictícios.
+
+### I19 — central de notificações
+
+- **Preparar/agir:** com dois dispositivos conectados, provoque movimento, luz e chamados de teste. Abra o sino, filtre por dispositivo/categoria, carregue mais e use **Ver detalhes**.
+- **Esperado:** cada ocorrência identifica o destinatário e horário; o link abre o dispositivo correto. Avisos importantes aparecem por oito segundos e pausam durante interação. A lista mantém as páginas consultadas até **Atualizar**.
+- **Exceção:** heartbeats não geram avisos; ausência de resultados mostra mensagem; desconexão do painel mantém os dados já carregados. Reconectar não reapresenta histórico em avisos. Uma falha do broker aparece como ocorrência global.
+- **Restaurar:** limpe os filtros, marque todas como lidas e feche por Escape. Recarregue para confirmar a leitura neste navegador; outro navegador mantém leitura própria.
 
 ## Encerramento e pendências
 

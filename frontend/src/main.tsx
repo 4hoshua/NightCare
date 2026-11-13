@@ -20,6 +20,7 @@ import {
 } from "./views";
 import { ArchiveLists, useRecords } from "./records";
 import { FleetOverview, FleetAlerts, FleetAdmin, FleetApp } from "./fleet";
+import { NotificationBell } from "./notifications";
 import "./style.css";
 export function DeviceApp({
   deviceId,
@@ -279,18 +280,7 @@ export function DeviceApp({
             </span>
           </div>
           <div className="topbar-actions">
-            <a
-              className={`help-indicator ${activeRequest ? "active" : ""}`}
-              href="#assistencia"
-              aria-label={
-                activeRequest
-                  ? "Chamado ativo — abrir Assistência"
-                  : "Abrir Assistência"
-              }
-            >
-              <Icon name="help" />
-              {activeRequest && <span className="indicator-dot" />}
-            </a>
+            <NotificationBell active={active} />
             <span className="topbar-divider" />
             <button
               className={`sound-button ${sound ? "enabled" : ""}`}
@@ -329,7 +319,7 @@ export function DeviceApp({
               </StatusBadge>
               <span>
                 {page === "dashboard"
-                  ? `${connected ? overview?.devices.filter((d) => d.online).length ?? 0 : 0} de ${overview?.devices.length ?? 0} dispositivos online`
+                  ? `${connected ? (overview?.devices.filter((d) => d.online).length ?? 0) : 0} de ${overview?.devices.length ?? 0} dispositivos online`
                   : `Última comunicação: ${date(snapshot?.device.lastSeen ?? null)}`}
               </span>
             </div>

@@ -162,7 +162,13 @@ A barra lateral pode ser expandida ou recolhida. No celular, o botão de menu ab
 | Assistência | pedido ativo, acionamentos do botão, tempo desde abertura, reconhecer/encerrar e resultados das últimas ações |
 | Administração | descoberta/associação, correção de nomes, históricos por dispositivo ou globais e diagnósticos |
 
-O indicador de chamado e o controle de som ficam disponíveis em todas as telas. Trocar de tela ou de dispositivo preserva separadamente os formulários e filtros de cada dispositivo. O áudio é global e considera qualquer chamado pendente; a lista global identifica o destinatário. A seleção fica no parâmetro `device` do endereço. A conexão em tempo real é compartilhada. Administração organiza as informações existentes; não cria um perfil de acesso separado.
+O sino de notificações e o controle de som ficam disponíveis em todas as telas. Trocar de tela ou de dispositivo preserva separadamente os formulários e filtros de cada dispositivo. O áudio é global e considera qualquer chamado pendente; a lista global identifica o destinatário. A seleção fica no parâmetro `device` do endereço. A conexão em tempo real é compartilhada. Administração organiza as informações existentes; não cria um perfil de acesso separado.
+
+O **sino** abre a central global: presença, movimento, luz, chamados, configurações, comandos, associação/renomeação e diagnósticos. Há filtros por dispositivo/categoria e paginação. O histórico fica no SQLite por **30 dias**, sem apagar as coleções técnicas. A central começa a registrar após esta atualização, sem converter registros antigos. O nome do leito é preservado como era na ocorrência; o ID continua identificando o dispositivo.
+
+O contador é de não lidas neste navegador e instalação. Abrir a central marca as ocorrências existentes como vistas; **Marcar todas como lidas** inclui as novas. A consulta aberta mantém suas páginas: use **Atualizar · novas notificações** para trazer novidades. Chamados e falhas geram avisos de oito segundos (pausados com mouse/foco), no máximo três ao mesmo tempo, com resumo em rajadas. Histórico inicial/reconexão não dispara avisos retroativos. O som continua exclusivo dos chamados, mediante ativação do usuário. Falha no broker é um aviso global, sem gerar uma falsa queda individual de cada dispositivo; a desconexão navegador/backend é um aviso local.
+
+A presença exige estado novo: dados retidos não indicam online. Heartbeats e mensagens repetidas não geram notificações; diagnóstico considera a última telemetria recebida ao vivo. Configurações sem confirmação em dez segundos ganham um aviso, mas a intenção continua pendente e pode ser confirmada depois. As notificações cobrem apenas o que o backend recebeu/observou: a limitação de entrega quando ele está parado continua válida. Não há push do sistema operacional ou envio de mensagens externas.
 
 Modo e brilho atuais vêm do estado do ESP32. O firmware atualizado também publica agenda, prazo e offset UTC efetivamente ativos em `runtimeSettings`, incluindo alterações pelo serial. O painel separa esses parâmetros da configuração remota confirmada e da última configuração enviada. Firmware anterior continua aceito: nesse caso o painel informa a ausência dessa telemetria. A versão confirmada é consultada diretamente no banco, mesmo fora das 30 configurações recentes. Offline, os dados são identificados como última informação recebida.
 
@@ -231,6 +237,7 @@ curl -fsS -X POST http://localhost:3000/api/devices/nightcare-001/config \
 | `GET /health/ready` | SQLite e conexão MQTT; 503 sem broker |
 | `GET /ui-config` | informa se o modo demo está ativo |
 | `GET /api/status`, `/ws` | visão global: `devices`, `beds`, `snapshots` por deviceId, `brokerConnected` |
+| `GET /api/notifications` | central global paginada, contagem de não lidas e metadados da instalação |
 | `GET /api/devices`, `/api/beds` | dispositivos encontrados e leitos associados |
 | `POST /api/devices/:deviceId/assign` | `{ "name": "Leito 2" }`, HTTP 201 ao associar |
 | `PATCH /api/beds/:id` | `{ "name": "Leito B" }`, corrige nome; não aceita trocar deviceId |
@@ -245,6 +252,8 @@ curl -fsS -X POST http://localhost:3000/api/devices/nightcare-001/config \
 | `POST /api/commands` | `commandId`, `requestId`, `action: ACK_HELP ou CLOSE_HELP` |
 | `GET /api/commands/:id` | resultado da intenção |
 | `GET /ws` com upgrade WebSocket | `{type:"snapshot",data:...}` inicial e ao mudar dados |
+
+`GET /api/notifications` aceita `limit` (1–100, padrão 30), `cursor`, `deviceId`, `category`, `readThroughId` (marcador local de leitura), `afterId` e `untilId` (faixa de IDs). Retorna `items`, `nextCursor`, `installationId`, `latestId` e `unreadCount` global, independente dos filtros. Categorias: `presence`, `lighting`, `motion`, `assistance`, `configuration`, `commands`, `administration`, `diagnostics`, `system`. Cursor está vinculado à instalação e aos filtros/faixa. Cada item contém ID sequencial, tipo/categoria/severidade, descrição, dispositivo, nome histórico do leito, referência da operação e horários de ocorrência/recebimento. `/api/status` e snapshots `/ws` acrescentam `notifications: {installationId, latestId}`; os demais campos permanecem compatíveis. Leitura não é gravada no servidor nem compartilhada entre navegadores.
 
 Para comandos manuais, copie o requestId ativo de `/api/devices/:deviceId/status` e use sempre a rota do mesmo dispositivo. Use um ID novo por intenção e repita o mesmo corpo/ID apenas para repetir a mesma intenção:
 

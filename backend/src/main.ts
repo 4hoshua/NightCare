@@ -56,6 +56,7 @@ let delay = 1000;
 let retry: NodeJS.Timeout | undefined;
 let stopping = false;
 client.on("connect", () => {
+  store.brokerChanged(true);
   delay = 1000;
   if (retry) clearTimeout(retry);
   retry = undefined;

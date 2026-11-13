@@ -6,6 +6,7 @@ import { existsSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { z } from "zod";
 import { commandInput, settingsSchema, deviceIdSchema } from "./contracts.js";
+import { notificationCategories } from "./notifications.js";
 import { Store } from "./store.js";
 export async function buildApp(
   store: Store,
@@ -80,6 +81,37 @@ export async function buildApp(
     ...store.overview(),
     brokerConnected: brokerConnected(),
   }));
+  app.get("/api/notifications", async (req) =>
+    store.notifications.page(
+      z
+        .object({
+          limit: z.coerce.number().int().min(1).max(100).optional(),
+          cursor: z.string().min(1).max(2048).optional(),
+          category: z.enum(notificationCategories).optional(),
+          deviceId: deviceIdSchema.optional(),
+          readThroughId: z.coerce
+            .number()
+            .int()
+            .min(0)
+            .max(Number.MAX_SAFE_INTEGER)
+            .optional(),
+          afterId: z.coerce
+            .number()
+            .int()
+            .min(0)
+            .max(Number.MAX_SAFE_INTEGER)
+            .optional(),
+          untilId: z.coerce
+            .number()
+            .int()
+            .min(0)
+            .max(Number.MAX_SAFE_INTEGER)
+            .optional(),
+        })
+        .strict()
+        .parse(req.query),
+    ),
+  );
   const deviceParams = z.object({ deviceId: deviceIdSchema });
   const nameSchema = z
     .object({ name: z.string().trim().min(1).max(64) })

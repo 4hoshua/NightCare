@@ -1,4 +1,6 @@
 import Database from "better-sqlite3";
+import { randomUUID } from "node:crypto";
+import { NotificationJournal, notificationReason } from "./notifications.js";
 import {
   DEVICE,
   PREFIX,
@@ -31,6 +33,10 @@ export class Store {
   db: Database.Database;
   publish?: Publisher;
   readonly rootPrefix: string;
+  readonly notifications: NotificationJournal;
+  private presence = new Map<string, boolean>();
+  private brokerState: boolean | undefined;
+
   constructor(
     path: string,
     readonly now = () => Date.now(),
@@ -119,15 +125,78 @@ export class Store {
         CREATE INDEX IF NOT EXISTS requests_page ON assistance_requests(device_id,opened_at,request_id);
         CREATE INDEX IF NOT EXISTS commands_page ON commands(device_id,created_at,command_id);`);
     })();
+    this.notifications = new NotificationJournal(this.db, this.now);
+    this.notifications.add({
+      source: `backend:${randomUUID()}`,
+      type: "BACKEND_STARTED",
+      category: "system",
+      title: "Backend iniciado",
+    });
     // Persisted telemetry is never evidence of a live connection after restart.
     this.db
       .prepare("UPDATE devices SET availability='offline',state_seen=NULL")
       .run();
   }
+  brokerChanged(connected: boolean) {
+    if (this.brokerState === connected) return;
+    this.brokerState = connected;
+    this.notifications.add({
+      source: `broker:${randomUUID()}`,
+      type: connected ? "BROKER_CONNECTED" : "BROKER_DISCONNECTED",
+      category: "system",
+      severity: connected ? "info" : "warning",
+      title: connected
+        ? "Conexão com o broker estabelecida"
+        : "Conexão com o broker indisponível",
+      detail: connected
+        ? null
+        : "A presença dos dispositivos não pode ser confirmada enquanto o broker estiver desconectado.",
+    });
+  }
   markDisconnected() {
-    this.db
-      .prepare("UPDATE devices SET availability='offline',state_seen=NULL")
-      .run();
+    this.db.transaction(() => {
+      this.brokerChanged(false);
+      this.db
+        .prepare("UPDATE devices SET availability='offline',state_seen=NULL")
+        .run();
+      // A broker failure is reported globally, rather than as individual failures.
+      this.presence.clear();
+    })();
+  }
+  private reconcilePresence(id?: string) {
+    for (const d of id ? [this.device(id)] : this.devices()) {
+      const previous = this.presence.get(d.deviceId) ?? false;
+      if (previous !== d.online)
+        this.notifications.add({
+          source: `presence:${randomUUID()}`,
+          deviceId: d.deviceId,
+          type: d.online ? "DEVICE_ONLINE" : "DEVICE_OFFLINE",
+          category: "presence",
+          severity: d.online ? "info" : "warning",
+          title: d.online ? "Dispositivo online" : "Dispositivo offline",
+          detail: d.online
+            ? null
+            : "Desconexão informada ou ausência de estado novo por 45 segundos.",
+        });
+      this.presence.set(d.deviceId, d.online);
+    }
+  }
+  private configResult(
+    id: string,
+    version: number,
+    status: string,
+    reason: string,
+  ) {
+    this.notifications.add({
+      source: `config:${id}:${version}:${status}`,
+      deviceId: id,
+      type: `CONFIG_${status}`,
+      category: "configuration",
+      severity: status === "APPLIED" ? "info" : "warning",
+      title: `Configuração v${version} ${status === "APPLIED" ? "confirmada" : status === "REJECTED" ? "recusada" : "sem confirmação"}`,
+      reference: String(version),
+      detail: notificationReason(reason),
+    });
   }
   beds() {
     return this.db
@@ -191,6 +260,13 @@ export class Store {
           "INSERT INTO beds(name,name_key,device_id,created_at) VALUES (?,?,?,?)",
         )
         .run(name, key, id, this.now());
+      this.notifications.add({
+        source: `assign:${id}`,
+        deviceId: id,
+        type: "BED_ASSIGNED",
+        category: "administration",
+        title: "Dispositivo associado ao leito",
+      });
       return { id: Number(result.lastInsertRowid), name, deviceId: id };
     })();
   }
@@ -205,9 +281,19 @@ export class Store {
           .get(key, id)
       )
         fail("BED_NAME_CONFLICT");
+      const previous = (this.beds() as any[]).find((b) => b.id === id);
       this.db
         .prepare("UPDATE beds SET name=?,name_key=? WHERE id=?")
         .run(name, key, id);
+      if (previous.name !== name)
+        this.notifications.add({
+          source: `rename:${randomUUID()}`,
+          deviceId: previous.deviceId,
+          type: "BED_RENAMED",
+          category: "administration",
+          title: "Nome do leito atualizado",
+          detail: `${previous.name} → ${name}`,
+        });
       return (this.beds() as any[]).find((b) => b.id === id);
     })();
   }
@@ -234,10 +320,19 @@ export class Store {
     const now = this.now();
     this.db.transaction(() => {
       // An unsolicited ACK is not a device announcement.
-      if (suffix !== "acks")
-        this.db
+      if (suffix !== "acks") {
+        const discovered = this.db
           .prepare("INSERT OR IGNORE INTO devices(device_id) VALUES (?)")
           .run(id);
+        if (discovered.changes)
+          this.notifications.add({
+            source: `discovered:${id}`,
+            deviceId: id,
+            type: "DEVICE_DISCOVERED",
+            category: "presence",
+            title: "Dispositivo encontrado",
+          });
+      }
       const p = input as any;
       if (suffix === "events")
         this.db
@@ -257,6 +352,45 @@ export class Store {
             now,
             JSON.stringify(p),
           );
+        if (result.changes && p.type !== "CONFIG_APPLIED") {
+          const titles: Record<string, string> = {
+            BOOT: "Dispositivo iniciado",
+            MOTION_STARTED: "Movimento detectado",
+            MOTION_ENDED: "Movimento encerrado",
+            LIGHT_ON: "Luz acesa",
+            LIGHT_OFF: "Luz apagada",
+            HELP_OPENED: "Chamado aberto",
+            HELP_REITERATED: "Pedido de ajuda reiterado",
+            HELP_ACKNOWLEDGED: "Chamado reconhecido",
+            HELP_CLOSED: "Chamado encerrado",
+            HELP_RECOVERED: "Chamado recuperado após reinício",
+          };
+          this.notifications.add({
+            source:
+              p.type === "HELP_OPENED"
+                ? `help:${id}:${p.requestId}:opened`
+                : `event:${id}:${p.eventId}`,
+            deviceId: id,
+            type: p.type,
+            category: p.type.startsWith("HELP_")
+              ? "assistance"
+              : p.type.startsWith("MOTION_")
+                ? "motion"
+                : p.type.startsWith("LIGHT_")
+                  ? "lighting"
+                  : "diagnostics",
+            severity: [
+              "HELP_OPENED",
+              "HELP_REITERATED",
+              "HELP_RECOVERED",
+            ].includes(p.type)
+              ? "urgent"
+              : "info",
+            title: titles[p.type],
+            reference: p.requestId,
+            occurredAt: p.occurredAt,
+          });
+        }
         if (result.changes && p.requestId) {
           const status =
             p.type === "HELP_CLOSED"
@@ -275,6 +409,74 @@ export class Store {
       } else if (suffix === "state") {
         const old = this.device(id).state;
         if (old?.bootId === p.bootId && p.sequence <= old.sequence) return;
+        if (!retained) {
+          const saved = this.db
+            .prepare(
+              "SELECT state FROM notification_diagnostics WHERE device_id=?",
+            )
+            .get(id) as any;
+          const diagnostic = saved ? JSON.parse(saved.state) : null;
+          for (const [field, bad, title, recovery] of [
+            [
+              "clockValid",
+              false,
+              "Relógio inválido ou em teste",
+              "Relógio sincronizado",
+            ],
+            [
+              "persistenceOk",
+              false,
+              "Falha de persistência no dispositivo",
+              "Persistência restabelecida",
+            ],
+          ] as const) {
+            if (
+              (!diagnostic && p[field] === bad) ||
+              (diagnostic && diagnostic[field] !== p[field])
+            )
+              this.notifications.add({
+                source: `diagnostic:${id}:${p.bootId}:${p.sequence}:${field}`,
+                deviceId: id,
+                type: `${field === "clockValid" ? "CLOCK" : "PERSISTENCE"}_${p[field] ? "RECOVERED" : "FAILED"}`,
+                category: "diagnostics",
+                severity: p[field] ? "info" : "warning",
+                title: p[field] ? recovery : title,
+              });
+          }
+          if (
+            p.droppedEvents >
+            (diagnostic?.bootId === p.bootId ? diagnostic.droppedEvents : 0)
+          )
+            this.notifications.add({
+              source: `loss:${id}:${p.bootId}:${p.sequence}`,
+              deviceId: id,
+              type: "EVENTS_DROPPED",
+              category: "diagnostics",
+              severity: "warning",
+              title: "Dispositivo informou perda de eventos",
+              detail: `Total neste reinício: ${p.droppedEvents}`,
+            });
+          if (
+            p.requestId &&
+            p.assistanceStatus === "PENDING" &&
+            (diagnostic?.requestId !== p.requestId ||
+              diagnostic?.assistanceStatus !== "PENDING")
+          )
+            this.notifications.add({
+              source: `help:${id}:${p.requestId}:opened`,
+              deviceId: id,
+              type: "HELP_OPENED",
+              category: "assistance",
+              severity: "urgent",
+              title: "Chamado ativo recebido",
+              reference: p.requestId,
+            });
+          this.db
+            .prepare(
+              "INSERT INTO notification_diagnostics(device_id,state) VALUES (?,?) ON CONFLICT(device_id) DO UPDATE SET state=excluded.state",
+            )
+            .run(id, JSON.stringify(p));
+        }
         this.db
           .prepare(
             "UPDATE devices SET state=?,state_seen=?,last_seen=?,availability=? WHERE device_id=?",
@@ -292,11 +494,23 @@ export class Store {
               `INSERT INTO assistance_requests(device_id,request_id,status,press_count,updated_at,opened_at) VALUES (?,?,?,?,?,?) ON CONFLICT(device_id,request_id) DO UPDATE SET status=excluded.status,press_count=excluded.press_count,updated_at=excluded.updated_at`,
             )
             .run(id, p.requestId, p.assistanceStatus, p.pressCount, now, now);
+        const config = this.db
+          .prepare(
+            "SELECT status FROM device_configs WHERE device_id=? AND config_version=?",
+          )
+          .get(id, p.appliedConfigVersion) as any;
         this.db
           .prepare(
             "UPDATE device_configs SET status='APPLIED',reason='STATE_CONFIRMED' WHERE device_id=? AND config_version=?",
           )
           .run(id, p.appliedConfigVersion);
+        if (config && config.status !== "APPLIED")
+          this.configResult(
+            id,
+            p.appliedConfigVersion,
+            "APPLIED",
+            "STATE_CONFIRMED",
+          );
       } else if (suffix === "availability") {
         if (p.status === "offline" || !retained)
           this.db
@@ -313,11 +527,13 @@ export class Store {
             .get(id, p.commandId) as any;
           if (!row || p.requestId !== row.request_id)
             throw new Error("uncorrelated ack");
-          this.db
+          const changed = this.db
             .prepare(
               "UPDATE commands SET status=?,reason=? WHERE device_id=? AND command_id=? AND status IN ('PENDING','UNCONFIRMED')",
             )
             .run(p.status, p.reason, id, p.commandId);
+          if (changed.changes)
+            this.commandResult({ ...row, status: p.status, reason: p.reason });
         } else {
           if (
             !this.db
@@ -327,13 +543,16 @@ export class Store {
               .get(id, p.configVersion)
           )
             throw new Error("uncorrelated config ack");
-          this.db
+          const changed = this.db
             .prepare(
-              "UPDATE device_configs SET status=?,reason=? WHERE device_id=? AND config_version=? AND status!='APPLIED'",
+              "UPDATE device_configs SET status=?,reason=? WHERE device_id=? AND config_version=? AND status!='APPLIED' AND status!=?",
             )
-            .run(p.status, p.reason, id, p.configVersion);
+            .run(p.status, p.reason, id, p.configVersion, p.status);
+          if (changed.changes)
+            this.configResult(id, p.configVersion, p.status, p.reason);
         }
       }
+      this.reconcilePresence(id);
     })();
   }
   configs(id = DEVICE) {
@@ -369,6 +588,14 @@ export class Store {
           "INSERT INTO device_configs(device_id,config_version,payload,created_at) VALUES (?,?,?,?)",
         )
         .run(id, p.configVersion, JSON.stringify(p), this.now());
+      this.notifications.add({
+        source: `config:${id}:${p.configVersion}:sent`,
+        deviceId: id,
+        type: "CONFIG_SENT",
+        category: "configuration",
+        title: `Configuração v${p.configVersion} enviada`,
+        reference: String(p.configVersion),
+      });
       return p;
     })();
     void this.tryPublish("config/set", JSON.stringify(payload), true, id);
@@ -401,19 +628,30 @@ export class Store {
       issuedAt: new Date(now).toISOString(),
       expiresAt: new Date(expires).toISOString(),
     };
-    this.db
-      .prepare(
-        "INSERT INTO commands(device_id,command_id,request_id,action,payload,created_at,expires_at) VALUES (?,?,?,?,?,?,?)",
-      )
-      .run(
-        id,
-        input.commandId,
-        input.requestId,
-        input.action,
-        JSON.stringify(p),
-        now,
-        expires,
-      );
+    this.db.transaction(() => {
+      this.db
+        .prepare(
+          "INSERT INTO commands(device_id,command_id,request_id,action,payload,created_at,expires_at) VALUES (?,?,?,?,?,?,?)",
+        )
+        .run(
+          id,
+          input.commandId,
+          input.requestId,
+          input.action,
+          JSON.stringify(p),
+          now,
+          expires,
+        );
+      this.notifications.add({
+        source: `command:${id}:${input.commandId}:sent`,
+        deviceId: id,
+        type: "COMMAND_SENT",
+        category: "commands",
+        title: `${input.action === "ACK_HELP" ? "Reconhecimento" : "Encerramento"} enviado`,
+        reference: input.commandId,
+        detail: "Aguardando confirmação do dispositivo.",
+      });
+    })();
     void this.tryPublish("commands", JSON.stringify(p), false, id);
     return this.getCommand(input.commandId, id);
   }
@@ -433,12 +671,54 @@ export class Store {
       .get(id, commandId);
     return row ? this.commandView(row) : null;
   }
+  private commandResult(row: any) {
+    this.notifications.add({
+      source: `command:${row.device_id}:${row.command_id}:${row.status}`,
+      deviceId: row.device_id,
+      type: `COMMAND_${row.status}`,
+      category: "commands",
+      severity: row.status === "APPLIED" ? "info" : "warning",
+      title: `${row.action === "ACK_HELP" ? "Reconhecimento" : "Encerramento"} ${row.status === "APPLIED" ? "confirmado" : row.status === "REJECTED" ? "recusado" : "sem confirmação"}`,
+      reference: row.command_id,
+      detail: notificationReason(row.reason),
+    });
+  }
   tick() {
-    this.db
-      .prepare(
-        "UPDATE commands SET status='UNCONFIRMED',reason='ACK_TIMEOUT' WHERE status='PENDING' AND created_at<=?",
-      )
-      .run(this.now() - 10000);
+    this.db.transaction(() => {
+      const timedOut = this.db
+        .prepare(
+          "SELECT * FROM commands WHERE status='PENDING' AND created_at<=?",
+        )
+        .all(this.now() - 10000) as any[];
+      this.db
+        .prepare(
+          "UPDATE commands SET status='UNCONFIRMED',reason='ACK_TIMEOUT' WHERE status='PENDING' AND created_at<=?",
+        )
+        .run(this.now() - 10000);
+      for (const row of timedOut)
+        if (row.created_at >= this.notifications.enabledAt)
+          this.commandResult({
+            ...row,
+            status: "UNCONFIRMED",
+            reason: "ACK_TIMEOUT",
+          });
+      for (const row of this.db
+        .prepare(
+          "SELECT device_id,config_version FROM device_configs WHERE status='PENDING' AND created_at>=? AND created_at<=?",
+        )
+        .all(
+          Math.max(this.notifications.enabledAt, this.now() - 30 * 86400000),
+          this.now() - 10000,
+        ) as any[])
+        this.configResult(
+          row.device_id,
+          row.config_version,
+          "UNCONFIRMED",
+          "Sem confirmação após 10 segundos; a intenção continua disponível para aplicação.",
+        );
+      this.reconcilePresence();
+      this.notifications.cleanup();
+    })();
   }
   async tryPublish(
     suffix: string,
@@ -641,6 +921,10 @@ export class Store {
       ...(beds.length === 1 ? this.snapshot(beds[0].deviceId) : {}),
       devices,
       beds,
+      notifications: {
+        installationId: this.notifications.installationId,
+        latestId: this.notifications.latestId,
+      },
       snapshots: Object.fromEntries(
         devices.map((d) => [d.deviceId, this.snapshot(d.deviceId)]),
       ),

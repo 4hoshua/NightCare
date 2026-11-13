@@ -1,5 +1,6 @@
 import { useEffect, useId, useRef, useState, type ReactNode } from "react";
 import { api, date, names, type Overview } from "./model";
+import { NotificationProvider } from "./notifications";
 export type FleetDeviceProps = {
   deviceId: string;
   active: boolean;
@@ -145,7 +146,11 @@ export function FleetApp({
     ? overview.devices.map((d) => d.deviceId)
     : [""];
   return (
-    <>
+    <NotificationProvider
+      overview={overview}
+      connected={connected}
+      onSelect={onSelect}
+    >
       {error && (
         <p role="alert" className="error">
           {error}
@@ -168,7 +173,7 @@ export function FleetApp({
           })}
         </div>
       ))}
-    </>
+    </NotificationProvider>
   );
 }
 export function FleetAlerts({
@@ -253,10 +258,11 @@ export function FleetOverview({
   const devices = overview?.devices ?? [];
   const [search, setSearch] = useState("");
   const searchId = useId();
-  const normalize = (text: string) => text
-    .normalize("NFD")
-    .replace(/[\u0300-\u036f]/g, "")
-    .toLocaleLowerCase("pt-BR");
+  const normalize = (text: string) =>
+    text
+      .normalize("NFD")
+      .replace(/[\u0300-\u036f]/g, "")
+      .toLocaleLowerCase("pt-BR");
   const beds = devices.filter((d) => d.bed);
   const query = normalize(search.trim());
   const filtered = beds.filter((d) =>
@@ -324,9 +330,7 @@ export function FleetOverview({
               <div>
                 <dt>Assistência</dt>
                 <dd>
-                  {d.state
-                    ? names[d.state.assistanceStatus]
-                    : "Sem informação"}
+                  {d.state ? names[d.state.assistanceStatus] : "Sem informação"}
                 </dd>
               </div>
               <div>
@@ -362,7 +366,10 @@ export function FleetOverview({
       {!!beds.length && !filtered.length && (
         <section className="card">
           <h2>Nenhum leito encontrado</h2>
-          <p>Tente outro nome ou ID de dispositivo, ou limpe a busca para exibir todos os leitos.</p>
+          <p>
+            Tente outro nome ou ID de dispositivo, ou limpe a busca para exibir
+            todos os leitos.
+          </p>
         </section>
       )}
       {!devices.some((d) => d.bed) && (

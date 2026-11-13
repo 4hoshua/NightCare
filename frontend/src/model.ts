@@ -150,6 +150,7 @@ export type Device = {
   lastSeen: number | null;
 };
 export type Overview = {
+  notifications?: { installationId: string; latestId: number };
   brokerConnected: boolean;
   devices: Device[];
   beds: { id: number; name: string; deviceId: string }[];

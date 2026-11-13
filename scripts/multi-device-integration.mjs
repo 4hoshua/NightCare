@@ -64,7 +64,18 @@ if(process.argv[2]==='serve'){
    await until(()=>!snapshot.snapshots[ids[0]].device.online);assert.equal(snapshot.snapshots[ids[1]].device.online,true);
    const all=(await api('/api/events?scope=all&limit=1')).data;assert.equal(all.items.length,1);assert.ok(all.nextCursor);
    assert.equal((await api(`/api/devices/${ids[1]}/events?cursor=${all.nextCursor}`)).status,400);
-   assert.ifError(error);console.log('PASS multi: discovery/association, separate motion/config, simultaneous calls, scoped ACK/CLOSE, global history and one-device Last Will');
+   const notifications=(await api('/api/notifications?limit=100')).data;
+   assert.ok(notifications.installationId);
+   assert.equal(notifications.items.filter(n=>n.type==='HELP_OPENED'&&n.reference==='multi-request').length,2);
+   assert.ok(notifications.items.some(n=>n.deviceId===ids[0]&&n.type==='CONFIG_APPLIED'));
+   assert.ok(notifications.items.some(n=>n.deviceId===ids[0]&&n.type==='HELP_CLOSED'));
+   assert.ok(notifications.items.some(n=>n.deviceId===ids[0]&&n.type==='DEVICE_OFFLINE'));
+   assert.ok(notifications.items.some(n=>n.deviceId===ids[1]&&n.type==='COMMAND_APPLIED'));
+   const read=(await api(`/api/notifications?readThroughId=${notifications.latestId}&category=assistance`)).data;
+   assert.equal(read.unreadCount,0);
+   await until(()=>snapshot.notifications.latestId>=notifications.latestId);
+   assert.equal(snapshot.notifications.installationId,notifications.installationId);
+   assert.ifError(error);console.log('PASS multi: discovery/association, separate motion/config, simultaneous calls, scoped ACK/CLOSE, global history and one-device Last Will; persistent notification API and WebSocket metadata');
  }finally{
    ws?.terminate();for(const d of clients){clearInterval(d.heartbeat);if(d.client.connected){for(const suffix of ['state','availability','config/set'])await d.client.publishAsync(d.prefix+suffix,'',{qos:1,retain:true});await d.client.endAsync();}}
  }
