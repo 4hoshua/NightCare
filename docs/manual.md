@@ -1,256 +1,209 @@
-# Manual da interface e roteiro do pitch — NightCare
+# Instalação e execução — NightCare
 
-Este é o documento principal para apresentar e operar o NightCare. Os comandos do ESP32 estão exclusivamente em [serial.md](serial.md); contratos e infraestrutura estão na [auditoria técnica](auditoria.md). Preparação e execução: [README](../README.md).
+[Índice](../README.md) · [Interface e API](interface.md) · [Arquitetura](arquitetura.md) · [Pitch](pitch.md)
 
-## Preparação da apresentação
+Este guia prepara a primeira etapa: Wokwi no navegador, broker público e backend/interface locais. Para operar as telas após o cadastro, siga o [guia da interface](interface.md). Todos os comandos abaixo partem da raiz do repositório, em um terminal Bash.
 
-O início normal com `scripts/demo.sh` abre uma sessão vazia: copie o novo `mqtt_demo.h` para o Wokwi e cadastre os leitos após os dispositivos conectarem. Para continuar os cadastros da sessão atual, execute `bash scripts/demo.sh --resume`. A opção `--devices` prepara os pacotes; ela não registra leitos.
+## 1. Instalar os requisitos
 
-Prepare dois pacotes, um para `nightcare-001` e outro para `nightcare-002`, conforme o README. Abra dois projetos/cópias distintos no Wokwi em janelas separadas, cada uma com os quatro arquivos do seu pacote. Mantenha ambas em execução e visíveis quando possível. Não duplique a identidade de uma simulação.
+**Docker com Compose v2 é essencial para o caminho descrito neste guia.** Ele executa backend e interface compilada, sem exigir Node local. Instale também Python 3, Bash e um navegador; mantenha acesso à internet para downloads, MQTT e NTP.
 
-Abra o dashboard em `/`. Na Administração, confira os dois dispositivos encontrados e o recebimento de estado novo. Em uma instalação nova, associe um ao **Leito 1** e o outro ao **Leito 2**. Em banco migrado, o dispositivo anterior já estará no Leito 1: confirme apenas o novo. A associação é permanente nesta versão; o nome pode ser corrigido.
+### Windows: Docker Desktop e Git Bash
 
-Para testar iluminação durante o dia, selecione cada leito em Iluminação e movimento, envie AUTO, brilho 30%, prazo 5 s e agenda 00:00–00:00. Aguarde confirmação por dispositivo. Confira relógio sincronizado e presença online. Use apenas chamados fictícios.
+1. Instale o [Docker Desktop para Windows](https://docs.docker.com/desktop/setup/install/windows-install/), usando backend WSL 2 e contêineres Linux. Se precisar instalar WSL, execute `wsl --install` no PowerShell como administrador e reinicie. Confira os requisitos de virtualização e sistema na página oficial.
+2. Abra Docker Desktop e aguarde o mecanismo iniciar. Mantenha-o em execução durante o uso do projeto; o Compose v2 está incluído.
+3. Instale [Git for Windows](https://git-scm.com/install/windows), que inclui **Git Bash**. É esse terminal que executará os scripts `.sh`; GitLab é uma plataforma de hospedagem e não substitui o Bash. Abra Git Bash pelo menu Iniciar ou pelo menu de contexto da pasta.
+4. Instale [Python 3 para Windows](https://www.python.org/downloads/windows/). No instalador tradicional, habilite a inclusão no PATH. Reabra o Git Bash após instalar.
+5. Entre na cópia local do projeto e verifique o ambiente:
 
-## Pitch sugerido — cinco a sete minutos
+   ```bash
+   cd "/c/Users/SeuNome/Downloads/NightCare"
+   docker info
+   docker compose version
+   python3 --version
+   bash --version
+   ```
 
-1. **Apresente o problema e a visão geral.** “Cada leito possui seu próprio assistente. O cuidador acompanha todos em um painel.” Mostre os cartões dos dois leitos e a identificação de luz, movimento, relógio e assistência.
-2. **Demonstre movimento independente.** No circuito Wokwi do Leito 1, acione o PIR por Simulate Motion. Mostre luz/movimento somente no cartão do Leito 1, mantendo o Leito 2 em repouso. Aguarde PIR inativo e o prazo para apagar.
-3. **Ajuste um leito.** Abra a iluminação do Leito 1, troque o modo ou envie um novo brilho. Mostre a intenção enviada e depois a confirmação pelo dispositivo. O Leito 2 conserva sua configuração.
-4. **Abra dois pedidos de ajuda.** Pressione AJUDA em cada circuito. Mostre os dois chamados na lista global, com nomes dos leitos. O botão funciona mesmo com a iluminação desligada.
-5. **Atenda um sem encerrar o outro.** Selecione o chamado do Leito 1, reconheça e encerre após confirmação. O chamado do Leito 2 continua visível. Explique que “enviado” ainda não significa “aplicado”.
-6. **Mostre acompanhamento e histórico.** Em Administração, consulte eventos do leito selecionado e depois Todos os dispositivos. Mostre leito/dispositivo, horários, identificação e resultados dos comandos.
-7. **Conclua com os limites.** A iluminação e o botão operam localmente; avisos remotos dependem de conexão e do painel aberto. É um protótipo acadêmico de apoio, sem certificação médica ou garantia de prevenção de quedas.
+Ajuste o caminho ao seu computador. `docker info` precisa mostrar a seção Server sem erro. Docker Desktop precisa ter acesso à pasta do projeto.
 
-O som é opcional: habilite por clique antes de abrir os pedidos. Evite ensaios de rede, serial, banco e certificados durante o pitch. Faça esses testes separadamente.
+Se `python3` não existir ou abrir a Microsoft Store, mas `python --version` identificar Python 3, use no Git Bash:
 
-## Regras de operação
+```bash
+python3() { python "$@"; }
+export -f python3
+python3 --version
+```
 
-- **Dashboard:** mostra todos os leitos associados. Use **Buscar leito ou dispositivo** para filtrar os cartões por nome ou ID, sem diferenciar maiúsculas ou acentos; **Limpar busca** volta a exibir todos. A busca acontece no navegador. Dispositivos sem leito aparecem para associação e seus chamados conhecidos continuam visíveis, mesmo durante a busca.
-- **Sino de notificações:** abre a atividade de todos os dispositivos, com filtros, horários e **Ver detalhes** para ir à tela do destinatário. O contador representa as notificações não lidas neste navegador; abrir ou atualizar a central não zera o contador. Use **Atualizar** para trazer novidades à lista aberta, **Carregar mais** para consultar as anteriores e **Marcar todas como lidas** para zerar o contador e remover os destaques, com confirmação visível. O histórico cobre os últimos 30 dias. Todas as novas notificações também aparecem em toasts com o leito/dispositivo e acesso aos detalhes, incluindo movimento, luz e presença; rajadas são resumidas em até três avisos simultâneos. O som continua dedicado aos chamados.
-- **Estados nos cartões:** luz acesa tem lâmpada dourada iluminada; apagada tem lâmpada riscada. Movimento detectado pulsa discretamente. Chamado pendente destaca sino e borda dourada; reconhecido mostra confirmação. Relógio inválido usa triângulo de alerta. Ícones acompanham os textos; sem dados aparece “Sem informação”. Offline ou sem conexão, não há animação de atividade e os valores são a última informação recebida. A preferência por movimento reduzido mantém os sinais estáticos. Os botões ficam no rodapé, alinhados entre cartões da mesma linha, sem a mensagem adicional de última informação.
-- **Selecionar leito ou dispositivo:** fica na faixa **Dispositivo em acompanhamento**, dentro de Iluminação e movimento, Assistência e Administração, antes dos controles. Define o destinatário dessas telas; o ID selecionado aparece ao lado. O Dashboard tem visão global, sem seletor de leito.
-- **Iluminação:** um cartão reúne modo, brilho, prazo e agenda. Toda edição, inclusive Automático/Ligado/Desligado, fica como rascunho até **Aplicar configuração**. A lâmpada do slider é uma prévia local, distinta do estado real. O relógio abre o seletor próprio de hora/minuto, com **Definir horário** e **Cancelar**. As explicações ficam nos botões **?**, por hover, teclado ou toque. Detalhes de configuração ficam somente na Administração. Rascunhos e período dos gráficos são separados por leito.
-- **Gráficos da iluminação:** escolha 24 h, 7 dias, 30 dias ou Agenda do leito. Consulte movimentos por hora, movimentos/acionamentos ao longo do período e distribuição dentro/fora da agenda atual de referência. Use hover ou toque nas barras, ou navegue entre elas com as setas no teclado. A referência vem do dispositivo/versão confirmada, nunca da edição em curso; não representa todas as agendas antigas. Sem horário original, o recebimento é aproximado. Sem registros, não inferir ausência física de movimento. Os gráficos não estimam duração ou consumo.
-- **Assistência:** seletor e sinais ficam no Estado do Atendimento. Pedido, contador e acompanhamento ficam à esquerda; Sem chamado não é repetido no Pedido. **Tempo desde a abertura** permanece visível: **0 min 0 s** sem chamado, **Tempo indisponível** sem dados/abertura e tempo congelado na última comunicação offline. O acompanhamento mostra até **30 ações recentes** com scroll dourado/grafite, preenchendo a altura restante sem ampliar o card. À direita, **Indicadores de assistência** oferece **24 horas, 7 dias, 30 dias e Agenda do leito**, preservando seleção por dispositivo. A agenda usa a mesma execução aplicada de Iluminação, não rascunhos ou intenções; sem referência, fica indisponível. Gráfico de pontos agrupa primeiros registros por hora (24h/Agenda) ou dia (7/30d); passe o mouse, navegue com setas/Home/End ou toque para ver intervalo, contagem e fuso em tooltip flutuante. Escape ou toque fora fecham a seleção. Não há legenda fixa de pico. **Atualizar Gráficos** renova a consulta; reconexão, eventos e atualização por minuto também atualizam. Falhas mantêm cache com aviso; zero exige consulta concluída. Tooltips **?**, avisos operacionais, sequência Reconhecer/Encerrar e áudio global permanecem.
-- **Administração:** reúne header por dispositivo, registro de toda a instalação e informações detalhadas do dispositivo selecionado. Associa dispositivos encontrados e corrige nomes; não há transferência/substituição/remoção de vínculo. O header contém seletor/identidade e estado de conexão. Dispositivos e leitos e observabilidade têm dimensões iguais e altura estável: 600 px, ou 680 px até 700 px de largura. O registro mostra dois dispositivos por página, com Anterior/Próxima e rolagem interna, preservando rascunhos ao paginar. Os dois painéis ocupam a altura disponível: mapa de calor de presença e linha com área de comunicações nas últimas 24 horas. No mapa, cada coluna é uma hora e as linhas Online/Offline/Sem observação usam intensidade proporcional à duração naquele estado; sem preenchimento significa zero. Até 700 px, são dois blocos consecutivos de 12 horas. A linha liga totais horários sem suavização; zero mensagens mantém pontos na base. Abaixo, o card Configurações e diagnóstico ocupa toda a largura, com abas próprias por leito; use setas/Home/End para alternar pelo teclado. Configurações compara os cinco parâmetros nas fontes Atual/Remota confirmada/Último envio, com resultado da última intenção nos detalhes. Diagnóstico mostra comunicação, relógio, persistência e descartes em blocos, com uptime/sequência/AJUDA resumidos. Versões, motivos, IDs e explicações continuam nos detalhes expansíveis (Enter/Espaço ou toque). Não há pontuação de saúde.
-- **Histórico:** página própria na navbar. Header com seletor/ID abaixo do título, à esquerda. Dois cards com abrangências independentes: registros em abas Eventos/Chamados/Configurações e comandos em Todas/Reconhecer/Encerrar. Cada card escolhe entre o dispositivo do header e todos os dispositivos. Filtros independentes por período, tipo, resultado e ação conforme a coleção; consulta global ou por dispositivo. Anterior/Próxima navegam páginas de 25 registros; Atualizar consulta volta à primeira. As tabelas têm rolagem interna grafite/dourada, com teclado, roda e toque. Trocar ação preserva resultado/período; Limpar filtros dos comandos volta a Todas. Datas usam recebimento nos eventos, abertura nos chamados e criação nos comandos/configurações.
-- **Edições:** trocar de tela ou dispositivo preserva rascunhos e filtros na mesma página aberta. Recarregar o navegador pode descartá-los; a seleção do dispositivo fica no endereço.
-- **Presença:** painel, broker e dispositivo têm conexões distintas. Offline, valores conhecidos são última informação recebida; um dispositivo offline não altera os demais.
-- **Confirmação:** configuração desejada, configuração remota confirmada e parâmetros atuais são informações distintas. Sem telemetria dos parâmetros atuais, informar ausência, sem inventar valores.
+A função vale para essa sessão e é herdada pelos scripts Bash iniciados nela.
 
-Os menus de opções seguem o tema noturno. Além do clique, aceitam setas, Home/End, busca por digitação e Enter para escolher. Escape fecha somente a lista aberta; outro Escape fecha a central. Tab avança para o próximo controle. O sino anima ao abrir, e o painel aparece/desaparece suavemente; movimento reduzido é respeitado.
+### Linux e macOS
 
-## Roteiro de validação pela interface
+No Linux, instale [Docker Engine](https://docs.docker.com/engine/install/) e o [plugin Compose](https://docs.docker.com/compose/install/linux/), Python 3 e Bash. No macOS, instale [Docker Desktop](https://docs.docker.com/desktop/setup/install/mac-install/), Python 3 e use Bash. Verifique os mesmos comandos acima. No Linux, configure acesso ao daemon conforme a documentação do Docker; os scripts precisam conseguir executar `docker`.
 
-Registre teste, data, executor, condição inicial, resultado observado, evidência e restauração. Os resultados esperados abaixo não comprovam execução. Estímulos no circuito Wokwi fazem parte da demonstração; este roteiro não exige comandos no monitor serial.
+## 2. Iniciar a aplicação
 
-### I01 — descobrir e associar
+Na raiz do projeto:
 
-- **Preparar/agir:** iniciar uma simulação ainda não associada e abrir Administração. Informar um nome e confirmar.
-- **Esperado:** dispositivo aparece pelo ID; após associação, aparece pelo nome no seletor e no Dashboard.
-- **Exceção:** dispositivo offline ou apenas fotografia antiga: associação indisponível até estado novo. Nome vazio não é enviado; nome duplicado retorna erro.
-- **Restaurar:** usar somente os vínculos de teste desejados, pois a associação não pode ser desfeita nesta versão.
+```bash
+bash scripts/demo.sh
+```
 
-### I02 — vínculo permanente e correção de nome
+O script gera uma sessão, prepara os arquivos do Wokwi e constrói/inicia a aplicação. Abra **http://localhost:3000**. Não há login nem token. Uma sessão nova começa sem leitos: o script não cadastra dispositivos no banco.
 
-- **Preparar/agir:** corrigir nome em Administração e navegar para Dashboard/históricos.
-- **Esperado:** nome atualizado, mesmo dispositivo e histórico. Não existe transferência de dispositivo para outro leito.
-- **Exceção:** tentar nome já usado ou confirmar o mesmo dispositivo em outra aba; mostrar conflito sem criar vínculo adicional.
-- **Restaurar:** corrigir para o nome original, sem modificar o ID.
+Se a porta estiver ocupada:
 
-### I03 — movimento e iluminação independentes
+```bash
+DEMO_HTTP_PORT=3001 bash scripts/demo.sh
+```
 
-- **Preparar/agir:** dois leitos em AUTO, agenda 24 h e prazo 5 s. Acionar PIR somente no primeiro circuito.
-- **Esperado:** movimento/luz apenas no primeiro; ícone de movimento pulsa e lâmpada ganha brilho dourado. A luz permanece durante PIR ativo e apaga após inatividade mais prazo; o ícone volta a lâmpada riscada e o movimento fica estático.
-- **Exceção:** movimento renovado antes do prazo mantém luz; ausência de dados em um cartão não deve copiar o estado do outro.
-- **Restaurar:** aguardar os dois circuitos em repouso.
+Abra http://localhost:3001 e mantenha essa variável nos comandos que recriam a instalação. Ainda é necessário iniciar o ESP32 no Wokwi e associá-lo na Administração.
 
-### I04 — formulário e limites
+## Sessões novas e retomada
 
-- **Preparar/agir:** no leito selecionado, enviar modos AUTO/ON/OFF, brilho e prazo válidos; conferir confirmação e estado.
-- **Esperado:** alterações só naquele dispositivo; agenda com horários iguais habilita 24 h.
-- **Exceção:** slider limita brilho a 1–100% e o seletor limita horários válidos. Prazo vazio, 0/601 ou fracionário deve impedir envio sem aplicação parcial.
-- **Restaurar:** enviar configuração inicial válida e aguardar confirmação.
+**Executar `bash scripts/demo.sh` sem `--resume` cria namespace MQTT e banco novos.** Os volumes anteriores são preservados, mas não passam a ser o banco da nova sessão. A configuração/pacotes anteriores são arquivados em `.validation/demo-sessions/<identificador>/`.
 
-### I05 — prévia e aplicação conjunta preservam rascunho
+| Objetivo | Comando |
+| --- | --- |
+| Começar demonstração vazia | `bash scripts/demo.sh` |
+| Continuar sessão atual, com leitos e histórico | `bash scripts/demo.sh --resume` |
+| Preparar arquivos sem iniciar Docker ou rotacionar sessão | `bash scripts/demo.sh --prepare-only` |
+| Começar sessão com dois pacotes disponíveis | `bash scripts/demo.sh --devices nightcare-001,nightcare-002` |
+| Acrescentar/preparar pacotes na sessão atual | `bash scripts/demo.sh --prepare-only --devices nightcare-001,nightcare-002` |
+| Retomar com interface de desenvolvimento | `bash scripts/demo.sh --resume --dev` |
 
-- **Preparar/agir:** com brilho confirmado de 30%, editar para 61%, escolher Ligado e definir horários sem aplicar.
-- **Esperado:** lâmpada de prévia muda de intensidade, mas estado real e agenda de referência permanecem os anteriores. Nenhuma configuração é publicada até **Aplicar configuração**, que envia o conjunto.
-- **Exceção:** edições durante o envio continuam como rascunho após a resposta; cliques repetidos não criam envios paralelos. Erro não apaga edição nem confirma aplicação. Cancelar o seletor de horário preserva o valor anterior.
-- **Restaurar:** aplicar a configuração inicial completa e aguardar confirmação.
+`--devices` seleciona os pacotes gerados; não cria leitos nem restringe a descoberta a esses IDs. `--prepare-only` cria a configuração se ainda não houver uma. Para retomar, preserve `.env.demo` e o volume a que ele aponta. Não copie a configuração entre instalações independentes.
 
-### I06 — configuração com dispositivo offline
+Após criar uma sessão nova, **copie novamente `mqtt_demo.h` para o Wokwi**. Um simulador com namespace antigo não será descoberto na sessão nova.
 
-- **Preparar/agir:** manter backend conectado e pausar uma simulação; aguardar indicação offline. Enviar configuração para esse leito.
-- **Esperado:** intenção registrada, aguardando confirmação; outro leito permanece operacional. Após retomar, a última configuração desejada pode ser aplicada.
-- **Exceção:** painel sem backend não deve permitir envio como se tivesse sido salvo. Versão pendente não substitui o resumo confirmado.
-- **Restaurar:** retomar simulação e confirmar valores desejados.
+## 3. Preparar o projeto no Wokwi
 
-### I07 — parâmetros atuais e confirmação remota
+1. Abra o [circuito NightCare no Wokwi](https://wokwi.com/projects/479504505300117505) e crie uma cópia própria.
+2. Localize no computador a pasta gerada **`Wokwi/demo/nightcare-001/`**.
+3. Substitua os arquivos/abas `sketch.ino`, `diagram.json` e `libraries.txt` pelos conteúdos desse pacote.
+4. Crie uma aba com o nome exato **`mqtt_demo.h`** e copie todo o arquivo correspondente do mesmo pacote. Salve os quatro arquivos.
+5. Inicie a simulação com o gateway público padrão. Não habilite gateway privado.
 
-- **Preparar/agir:** conferir os três blocos de configuração em Iluminação/Administração e o diagnóstico do dispositivo selecionado.
-- **Esperado:** modo/brilho e parâmetros atuais vêm da telemetria; versão desejada e confirmada mantêm suas origens. Boot, sequência, uptime recebido, persistência e perdas são visíveis.
-- **Exceção:** firmware sem telemetria adicional informa ausência; versão aplicada ausente do banco não usa uma intenção pendente como substituta.
-- **Restaurar:** nenhuma ação destrutiva; alinhar parâmetros por novo envio somente se necessário.
+| Arquivo | Função | O que conferir |
+| --- | --- | --- |
+| `diagram.json` | Descreve ESP32, PIR, botão, LEDs, buzzer e conexões do circuito | Usar o circuito do pacote para manter os GPIOs corretos |
+| `libraries.txt` | Declara bibliotecas necessárias à compilação no navegador | Copiar também esse arquivo; o sketch utiliza ArduinoJson |
+| `sketch.ino` | Firmware: controle local, serial, Wi-Fi, MQTT, agenda e persistência | Usar a versão gerada, que seleciona explicitamente a demo |
+| `mqtt_demo.h` | Configura broker, identidade, client ID e tópicos da sessão | Nome exato, conteúdo completo, sessão e dispositivo corretos |
 
-### I08 — dois chamados e reiteração
+**`mqtt_demo.h` é essencial para a interface detectar o dispositivo correto.** Backend e ESP32 precisam compartilhar a mesma raiz de tópicos; a identidade precisa ser única. O arquivo não associa o leito: ele permite comunicação e descoberta para posterior confirmação do operador. Não o substitua pelo `.example.h`.
 
-- **Preparar/agir:** pressionar AJUDA em ambos os circuitos; reiterar apenas no primeiro, soltando o botão entre pressões.
-- **Esperado:** dois chamados globais; contagem aumenta apenas no primeiro, conservando ID e abertura daquele chamado.
-- **Exceção:** manter botão pressionado não deve gerar cliques repetidos. Chamados sem leito aparecem identificados pelo dispositivo, sem permitir atendimento antes do vínculo.
-- **Restaurar:** finalizar separadamente os chamados fictícios após reconhecer.
+Os arquivos diretos de `Wokwi/demo/` são aliases de `nightcare-001`; prefira a pasta com ID explícito. Não adicione headers TLS (`mqtt_secrets.h` ou exemplos) nem `wokwi.toml` ao projeto no navegador. O último é destinado ao uso opcional da extensão local.
 
-### I09 — reconhecer e encerrar por leito
+A demo usa `Wokwi-GUEST` sem senha, `broker.emqx.io:1883` e NTP `pool.ntp.org`. Não use `localhost` como broker: o ESP32 simulado acessa a internet pelo gateway do Wokwi, não a rede privada do computador. [Rede do Wokwi](https://docs.wokwi.com/guides/esp32-wifi).
 
-- **Preparar/agir:** selecionar o chamado do primeiro leito, reconhecer, aguardar confirmação e encerrar.
-- **Esperado:** só esse pedido muda; o segundo permanece pendente. Envio, resultado do comando e estado recebido ficam distintos.
-- **Exceção:** Encerrar fica indisponível antes do reconhecimento; offline/relógio inválido/comando em andamento impedem ação incompatível.
-- **Restaurar:** atender e encerrar também o chamado de teste restante.
+## 4. Registrar o dispositivo e concluir o setup
 
-### I10 — som global
+1. No monitor serial, a 115200 baud, aguarde conexão Wi-Fi/MQTT e sincronização NTP. `status` permite conferir o `deviceId`.
+2. Na interface, abra **Administração → Dispositivos e leitos**. Aguarde o dispositivo descoberto receber estado novo e ficar online.
+3. Confira o ID, escolha um nome, por exemplo **Leito 1**, e confirme a associação.
+4. Verifique o cartão no Dashboard e selecione o leito nas telas operacionais.
 
-- **Preparar/agir:** ativar som por clique e abrir chamado em um leito diferente do selecionado; navegar entre telas/leitos.
-- **Esperado:** alerta considera qualquer chamado pendente, preservando habilitação ao navegar. Reconhecimento retira a condição pendente daquele chamado.
-- **Exceção:** som bloqueado ou desativado não remove aviso visual. Recarga inicia som desativado. Não há garantia com aba fechada/suspensa.
-- **Restaurar:** desativar som e finalizar pedidos fictícios.
+**Com o dispositivo comunicando e associado ao nome do leito, o setup está pronto para uso.** Para reconhecer/encerrar chamados remotamente, aguarde também relógio real válido. O boot sincroniza automaticamente; não é necessário digitar comandos de relógio no início normal.
 
-### I11 — histórico de eventos e filtros
+A associação exige presença recente e nome único, com 1–64 caracteres após remover espaços das pontas. A unicidade considera normalização Unicode e caixa. O vínculo é permanente nesta versão: é possível corrigir o nome, mas não transferir, remover ou substituir o dispositivo. O nome não é gravado no ESP32.
 
-- **Preparar/agir:** produzir movimento e ciclo de assistência; filtrar por tipo e período na página Histórico.
-- **Esperado:** consulta do dispositivo selecionado, com leito/ID, recebimento, ocorrência e detalhes de evento. Todos os dispositivos amplia explicitamente a consulta.
-- **Exceção:** período invertido mostra erro; período vazio mostra ausência; horário do ESP32 ausente não é inventado. Trocar filtro descarta resposta anterior.
-- **Restaurar:** limpar filtros e atualizar consulta.
+Para confirmar o funcionamento inicial, use **Simulate Motion** no PIR e o botão AJUDA. Para testar luz automática durante o dia, envie pelo painel modo AUTO, agenda **00:00–00:00** e prazo de 5 s. Aguarde confirmação antes de acionar o PIR. O [guia da interface](interface.md#interações-com-o-esp32) explica respostas normais e falhas.
 
-### I12 — demais históricos e paginação
+## 5. Usar dois ou mais leitos
 
-- **Preparar/agir:** conferir chamados, comandos e configurações, primeiro por dispositivo e depois globalmente; usar Anterior/Próxima com massa preparada no ambiente isolado.
-- **Esperado:** IDs, abertura, contagem, parâmetros, validade, resultado e motivos corretos; IDs locais iguais de dispositivos distintos não se confundem.
-- **Exceção:** novas atualizações não removem páginas antigas; Atualizar consulta volta aos recentes. Falha de consulta aparece como erro, sem fingir resultado completo.
-- **Restaurar:** retornar ao dispositivo selecionado e atualizar consulta.
+Prepare os IDs na mesma sessão com `--devices`. Abra projetos/cópias Wokwi separados e copie os quatro arquivos da pasta de cada ID. Cada simulação utiliza um ESP32, client ID e tópicos próprios. Nunca execute duas simulações usando o mesmo pacote.
 
-### I13 — rascunhos e filtros por dispositivo
+Inicie os simuladores e associe cada ID na Administração. Mantenha janelas ativas quando possível. O Dashboard mostra os leitos juntos, mas movimento, parâmetros, assistência, configurações e comandos permanecem independentes. Não há comunicação direta entre simuladores.
 
-- **Preparar/agir:** editar brilho no Leito 1 sem enviar, trocar para Leito 2 e editar outro valor; alternar telas e retornar.
-- **Esperado:** cada rascunho/filtro é preservado separadamente. Nenhuma troca de seleção publica alterações. O leito destinatário permanece explícito.
-- **Exceção:** receber heartbeat ou configuração de outro leito não sobrescreve edição. Envio em andamento deve continuar identificado pelo destinatário original.
-- **Restaurar:** enviar ou corrigir manualmente os valores de teste em cada leito.
+## 6. Acompanhar, parar e retomar
 
-### I14 — navegação, celular e teclado
+```bash
+# Consultar serviços e últimos logs da demo
+docker compose --env-file .env.demo -p nightcare-demo -f compose.demo.yml ps
+docker compose --env-file .env.demo -p nightcare-demo -f compose.demo.yml logs --tail=100 backend
+# Parar serviços, preservando o volume SQLite
+docker compose --env-file .env.demo -p nightcare-demo -f compose.demo.yml down
+# Retomar a mesma sessão
+bash scripts/demo.sh --resume
+```
 
-- **Preparar/agir:** abrir as cinco telas em 390/768/1024/1440 px; recolher menu, usar voltar/avançar, Tab, Shift+Tab, Escape e pular conteúdo.
-- **Esperado:** menu móvel contém foco e retorna ao gatilho; conteúdo de outros perfis não entra no foco; tabelas rolam dentro do cartão.
-- **Exceção:** hash desconhecido retorna ao Dashboard; `/dashboard` e `/dashboard/` redirecionam para a aplicação única.
-- **Restaurar:** voltar ao Dashboard e fechar menu móvel.
+Se ativou desenvolvimento, inclua `-f compose.frontend-dev.yml` no comando `down` para parar também Vite. **`down -v` remove volumes**; não o use para uma parada normal. Não execute o início normal para retomar dados antigos: ele cria outra sessão.
 
-### I15 — perda de uma simulação
+A saúde do contêiner demo verifica o processo HTTP, não garante conexão ao broker. Consulte `GET /health/ready` ou os indicadores do painel para diagnosticar MQTT.
 
-- **Preparar/agir:** pausar/parar somente a simulação do Leito 1; manter a segunda ativa e aguardar expiração de presença.
-- **Esperado:** primeiro fica offline e conserva último estado conhecido; segundo permanece online e pode receber ações.
-- **Exceção:** fotografia antiga não comprova reconexão. Mesmo nome de leito não corrige identidades duplicadas; cada simulação exige seu pacote.
-- **Restaurar:** retomar primeira simulação e aguardar estado novo.
+## 7. Editar a interface com atualização automática
 
-### I16 — reconexão do painel
+```bash
+bash scripts/demo.sh --resume --dev
+```
 
-- **Preparar/agir:** deixar rascunho e som habilitado; durante uma interrupção controlada do backend, observar a página aberta; retomar serviço conforme README.
-- **Esperado:** aviso de desconexão, bloqueio/erro de envio e reconexão automática, preservando rascunho/som na mesma página.
-- **Exceção:** histórico pode não conter eventos enviados ao broker durante ausência do consumidor; não confundir recuperação do estado atual com garantia de histórico integral.
-- **Restaurar:** serviço ativo, estado novo de cada dispositivo e chamados fictícios finalizados.
+Abra **http://localhost:5173** e edite `frontend/`. Vite observa alterações com polling e atualiza CSS/React; algumas mudanças recarregam a página e podem perder rascunhos/ativação do áudio. A porta 3000 continua com a versão compilada na imagem.
 
-### I17 — resultado não confirmado
+Para ativar somente Vite com backend já iniciado, sem recriá-lo:
 
-- **Preparar/agir:** usar cenário de teste controlado sem resposta de dispositivo, preparado conforme auditoria técnica; observar Assistência.
-- **Esperado:** após 10 s, comando Não confirmado; envio não reconhece/encerra automaticamente o pedido. Validade é 60 s.
-- **Exceção:** ACK posterior válido atualiza o resultado; uma ação dirigida ao outro leito não confirma este comando.
-- **Restaurar:** aguardar validade, conferir estado recebido e concluir apenas o pedido de teste.
+```bash
+docker compose --env-file .env.demo -p nightcare-demo -f compose.demo.yml -f compose.frontend-dev.yml up --build --no-deps --renew-anon-volumes -d --wait frontend-dev
+```
 
-### I18 — persistência e migração
+Repita após alterações em `frontend/package.json` ou no lock para reinstalar dependências. Para parar somente Vite, use os mesmos arquivos Compose com `stop frontend-dev`. Portas alternativas podem ser informadas com `DEMO_HTTP_PORT=3001 DEV_HTTP_PORT=5174 bash scripts/demo.sh --resume --dev`.
 
-- **Preparar/agir:** após reinício controlado do backend e das simulações, abrir Administração e os dois detalhes; em banco migrado, conferir Leito 1 e registros antigos. Com presença/relógio válidos, testar Reconhecer e Encerrar em chamado fictício sem comandos no serial.
-- **Esperado:** nomes, vínculos, histórico e intenções preservados; presença exige estado novo. Recarga conserva chamado reconhecido no banco, sem transformá-lo em pendente por conta da navegação.
-- **Exceção:** instalação nova não inventa leitos; abre descoberta. A sincronização do dispositivo é automática; uma ação pode ficar Não confirmada antes do ACK posterior. Falha de rede/expiração continua impedindo aplicação. Não oferecer exclusão/transferência de vínculo como restauração de teste.
-- **Restaurar:** aguardar reconexão, revisar configurações e encerrar somente pedidos fictícios.
+Vite encaminha API/WS ao mesmo backend. Auxiliares temporários usados em validações antigas não fazem parte da instalação padrão.
 
-### I19 — central de notificações
+### Desenvolvimento opcional sem Docker
 
-- **Preparar/agir:** com dois dispositivos conectados, provoque movimento, luz e chamados de teste. Abra o sino, filtre por dispositivo/categoria, carregue mais e use **Ver detalhes**.
-- **Esperado:** cada ocorrência identifica o destinatário e horário; o link abre o dispositivo correto. Avisos importantes aparecem por oito segundos e pausam durante interação. A lista mantém as páginas consultadas até **Atualizar**.
-- **Exceção:** heartbeats não geram avisos; ausência de resultados mostra mensagem; desconexão do painel mantém os dados já carregados. Reconectar não reapresenta histórico em avisos. Uma falha do broker aparece como ocorrência global.
-- **Restaurar:** confirme que abrir/atualizar preserva as não lidas, limpe os filtros, marque todas como lidas e observe contador/destaques zerados e confirmação. Feche por Escape. Recarregue para confirmar a leitura neste navegador; outro navegador mantém leitura própria.
+O caminho de instalação acima continua sendo Docker. Para desenvolvimento nativo, use Node **>=22.13** e instale dependências com `npm ci --prefix backend` e `npm ci --prefix frontend`. A dependência SQLite nativa pode exigir Python, make e g++. Compile com `npm run build --prefix frontend` e `npm run build --prefix backend`.
 
-### I20 — menus de opções e animações
+Antes de `npm start --prefix backend`, configure `DEMO_MODE=true`, `MQTT_URL`, `MQTT_PREFIX` e `MQTT_CLIENT_ID` com os valores da sessão preparada em `.env.demo`. Defina `STATIC_ROOT` com o caminho absoluto de `frontend/dist`; o backend não carrega `.env.demo` automaticamente. Os padrões locais são `HOST=127.0.0.1`, porta 3000 e `DB_PATH=./data/nightcare.sqlite`. Não execute dois backends sobre o mesmo banco/instalação.
 
-- **Preparar/agir:** abra os seletores de dispositivo, modo, histórico e filtros de notificações. Escolha por clique/toque e por teclado (setas, Home/End, digitação e Enter).
-- **Esperado:** mesma aparência noturna, opção selecionada identificada e opções longas disponíveis com rolagem. A lista cabe na tela, inclusive no celular. Alterar o modo no formulário só edita o rascunho até enviar.
-- **Exceção:** Escape fecha primeiro a lista, mantendo a central; Tab avança sem escolher outra opção. Sem dispositivos, o seletor informa espera e fica indisponível. Movimento reduzido desativa as animações do sino e das listas.
-- **Restaurar:** volte aos filtros originais, descarte rascunhos de teste e feche a central; confirme abertura e fechamento suaves.
+Para usar `npm run dev --prefix frontend` fora do Docker, ajuste os destinos de proxy de `frontend/vite.config.ts` de `backend:3000` para `127.0.0.1:3000`. O repositório também mantém `flake.nix`/`flake.lock`: `nix develop` oferece ferramentas e os auxiliares `nc status` e `nc "events?scope=all&limit=20"` consultam a API local. A execução desse ambiente Nix permanece pendente nas evidências consolidadas.
 
-### I21 — gráficos, detalhes e troca de leito
+## Segunda etapa: preparar Mosquitto próprio
 
-- **Preparar/agir:** abrir Iluminação e movimento, consultar os botões **?**, escolher os três períodos e alternar os leitos com rascunhos diferentes.
-- **Esperado:** a Administração mantém atual/confirmado/enviado; período e rascunho são preservados por leito. Gráficos compactos têm explicações nos tooltips, larguras iguais na dupla inferior e empilhamento em telas menores. Cartões e gráficos têm transição ao ativar leito/período. Heartbeats não reiniciam animações. Barras mostram os valores por hover, toque e teclado, sem tabelas adicionais.
-- **Exceção:** sem registros, mostrar ausência de eventos, sem simular dados; sem agenda, não classificar dentro/fora. Falha de consulta preserva a última consulta daquele período/leito; respostas atrasadas não podem sobrescrever a seleção atual. Offline, sinais param e histórico fica identificado como última consulta. Movimento reduzido desativa animações.
-- **Restaurar:** retornar às últimas 24 h, fechar os tooltips e restaurar configurações dos leitos.
+Esta seção prepara a infraestrutura de software para a segunda etapa descrita na [arquitetura](arquitetura.md#segunda-etapa-do-projeto-esp32-real-e-mosquitto-próprio). Não transforma o pacote demo em firmware pronto para hardware.
 
-## Encerramento e pendências
+Em uma cópia sem configuração TLS anterior, tenha Docker, Python 3, Bash, OpenSSL e DNS/IPv4 público alcançável na porta 8883. Não inclua protocolo nem porta no argumento:
 
-Restaure em cada leito AUTO, brilho 30%, prazo 30 s e agenda 22:00–06:00 pela interface; aguarde confirmação. Finalize os pedidos fictícios, limpe filtros e deixe som conforme desejado. Não apague volumes nem refaça vínculos para restaurar a apresentação.
+```bash
+bash scripts/setup.sh HOST_PUBLICO
+docker compose up --build -d
+```
 
-Compilações e clientes MQTT de teste não substituem execução observada de duas simulações Wokwi. Circuito, debounce, PWM, latência e NVS precisam de ensaios próprios. Resultados efetivamente executados e limitações ficam na [auditoria técnica](auditoria.md).
+Substitua `HOST_PUBLICO` pelo endereço real. O script gera CA privada, certificado, usuários MQTT separados, `.env` e `Wokwi/mqtt_secrets.h`. Recusa sobrescrever configuração existente. Preserve esses arquivos e não publique segredos. O painel continua em loopback na porta 3000; evite conflito com a demo antes de iniciar essa modalidade.
 
-O período **Agenda do leito** usa a execução mais recente da agenda aplicada: desde o início até agora, quando em andamento, ou a última janela encerrada. Considera virada de dia e fuso do dispositivo; horários iguais significam 24 horas. A edição ainda não aplicada não altera o intervalo. Sem agenda conhecida, a opção fica indisponível.
+Para o primeiro dispositivo, compile `Wokwi/sketch.ino` com `NIGHTCARE_DEMO=0`, circuito/bibliotecas originais e `mqtt_secrets.h`. O ambiente PlatformIO `esp32dev` já fixa essa seleção. Em edição manual Arduino, coloque `#define NIGHTCARE_DEMO 0` antes dos includes. Não use o pacote `Wokwi/demo/` para TLS.
 
+**No ESP32 físico, adapte a chamada Wi-Fi ainda fixa para `Wokwi-GUEST` à rede real antes de gravar.** Os scripts não provisionam SSID/senha Wi-Fi. Verifique alimentação, compatibilidade elétrica e estágio de potência; o LED simulado representa a luminária. Compilação e testes com clientes MQTT não comprovam execução em hardware.
 
-### I22 — assistência, acompanhamento e gráfico de chamados
+Para adicionar credencial de outro dispositivo:
 
-- **Preparar/agir:** abrir Assistência sem chamado e conferir contador zerado. Com chamado fictício, reiterar AJUDA e reconhecer/encerrar; alternar 24 horas/7 dias/30 dias/Agenda do leito e leitos. No acompanhamento, testar rolagem com mais de cinco ações por roda, teclado e toque.
-- **Esperado:** contador permanece visível ao encerrar, voltando a zero; sem abertura conhecida, tempo indisponível; offline, tempo congelado. Histórico de até 30 ações preenche a área restante do card até seu padding inferior e rola sem aumentar sua altura. Novas entradas preservam leitura de ações anteriores. Gráfico de pontos mostra chamados por primeiro registro no backend, por hora (24h/Agenda) ou dia (7/30d), com tooltip flutuante por interação e sem legenda fixa de pico. A janela Agenda é igual à de Iluminação e não segue rascunhos. Os outros indicadores continuam mostrando acionamentos e resultados dos comandos. Período é preservado por leito/navegação; heartbeats iguais não reiniciam animações nem consultas.
-- **Exceção:** gráfico sem registros mantém pontos em zero; sem agenda conhecida, a opção fica indisponível; falha mantém cache ou informa indisponibilidade. Intervalos parciais e fuso são explícitos. Setas/Home/End navegam pontos; Escape fecha seleção; mouse/toque mostram contagem e intervalo. Não interpretar primeiro registro como instante físico exato do acionamento ou duração de atendimento. Tooltips e avisos de falha/envio continuam disponíveis. Conferir alturas com 0/1/5/30 ações, movimento reduzido e telas pequenas sem overflow.
-- **Restaurar:** finalizar somente chamados fictícios e retornar ao leito inicial/período de 24 horas.
+```bash
+bash scripts/provision-device.sh nightcare-002
+```
 
+O script preserva CA/senhas existentes, gera `Wokwi/tls/nightcare-002/mqtt_secrets.h` e solicita reload do Mosquitto. Use o header individual na pasta de build desse dispositivo, com identidade correspondente e seleção TLS. Se o broker estiver parado, acrescente `--no-reload` e inicie/recarregue depois. Instalações antigas precisam ter a ACL atualizada. Provisionar MQTT não associa leito: confirme o vínculo na Administração após comunicação recente.
 
-### I23 — Administração e observabilidade
+TLS valida CA, hostname e data; aguarde NTP. Não publique headers privados em projetos Wokwi compartilhados. HTTP/WS permanecem sem autenticação: TLS MQTT não acrescenta HTTPS ou login. Para host remoto, use acesso local ou túnel SSH.
 
-- **Preparar/agir:** selecionar um dispositivo com estado novo. Observar presença e comunicações nas últimas 24 horas; alternar leitos, abrir configurações e diagnóstico e consultar as ajudas **?**.
-- **Esperado:** quatro cards principais; header com seletor e identidade, registro paginado de dois dispositivos, observabilidade somente do selecionado e card de configurações/diagnóstico em abas. A dupla central mantém largura/altura iguais e não cresce com o total de dispositivos. O mapa de calor preserva as durações por hora entre online/offline/sem observação; a linha com área mostra totais horários de recebimentos válidos, incluindo reentregas QoS. Valores por hover, toque e foco/setas/Escape. Janela até o último minuto completo; coleta iniciada agora não traz dados anteriores.
-- **Exceção:** pausas do backend/broker não viram offline. Retidos não confirmam presença nem contam como comunicação. Falha de API preserva o gráfico anterior e oferece tentar novamente. Preferência de movimento reduzido desativa transições. Não interpretar presença como garantia de funcionamento físico.
-- **Restaurar:** retornar ao leito inicial e fechar detalhes; executar falhas somente em ambiente isolado.
+### Backup e restauração
 
-### I24 — Histórico separado, limitado e filtrado
+Antes de atualização/migração, faça backup consistente do SQLite: use a API de backup SQLite com banco ativo, ou pare o backend antes de copiar. Copiar apenas o arquivo principal com banco em uso pode perder dados do WAL. Na demo, identifique o volume correto pela configuração `.env.demo`; TLS usa `sqlite_data`. Preserve também configuração da sessão e, no TLS, material privado e volume Mosquitto.
 
-- **Preparar/agir:** abrir Histórico, consultar abas e comandos, filtrar por tipo/estado/ação/período e alternar alcance dispositivo/global. Navegar até a segunda página, mudar de tela e voltar.
-- **Esperado:** até 25 linhas por card/página, tabelas com rolagem própria e navegação acessível; abas, filtros e página ficam preservados entre telas. Novas atividades não deslocam a leitura. Trocar filtro reinicia na primeira página. Configurações/chamados preservam todos os detalhes antes consultados na Administração.
-- **Exceção:** intervalo invertido mostra erro; filtros sem resultados mostram vazio. Falha de consulta não publica sucesso nem altera outro card. Checar teclado e layouts estreitos.
-- **Restaurar:** limpar filtros, atualizar consultas e retornar ao dispositivo selecionado.
+Restaure primeiro em cópia/volume separado, com mesma versão de software e banco parado; confira integridade, vínculos e coleções antes de substituir a instalação. Não execute início de sessão nova como procedimento de restauração. Os [cenários técnicos](testes.md) distinguem ensaio de migração já realizado de restauração completa ainda pendente.
 
+## Solução de problemas
 
-### I25 — paginação estável e detalhes em abas
+| Sintoma | Conferir / resposta |
+| --- | --- |
+| Docker indisponível | Iniciar Docker Desktop/daemon, modo Linux, compartilhamento da pasta e `docker info` |
+| `python3` ausente no Windows | Instalação/PATH ou função Bash apresentada no início |
+| Porta ocupada | Usar `DEMO_HTTP_PORT`; Vite usa `DEV_HTTP_PORT` |
+| Wokwi pede header TLS na demo | Copiar os quatro arquivos gerados, sobretudo sketch e `mqtt_demo.h`; remover seleção TLS indevida |
+| Broker conectado, dispositivo ausente | Header da sessão atual, ID, prefixo, Wi-Fi e saída TCP 1883; iniciar a simulação |
+| Dispositivo aparece offline após reinício | Aguardar estado novo; retido não estabelece presença |
+| Associação recusada | Presença recente, dispositivo ainda sem vínculo e nome único |
+| Cadastros parecem ter desaparecido | Conferir se iniciou sessão nova; `--resume` retoma a configuração atual, não escolhe automaticamente sessão arquivada |
+| Reconhecimento não confirma | Conferir estado do chamado, NTP, validade e motivo do comando; aguardar ACK, sem repetir cliques indiscriminadamente |
+| 5173 e 3000 exibem versões diferentes | 5173 acompanha fontes; reconstruir backend com `--resume` atualiza a versão compilada |
+| Broker público indisponível | Conferir conectividade e aguardar recuperação; luz/botão locais continuam independentes da rede |
 
-- **Preparar/agir:** em ambiente isolado, exibir 0, 1, 2, 3 e vários dispositivos. Editar nome, paginar e voltar; repetir durante envio e em erro. Alternar as abas de detalhes, trocar de leito e retornar.
-- **Esperado:** até dois registros por página; largura/altura iguais nos cards de registro e observabilidade, sem mudar pela quantidade de dispositivos. Paginação no rodapé; conteúdo excedente rola internamente. Rascunho, resultado de envio e erro não são perdidos ao paginar. Lista menor ajusta a página para a última válida; heartbeat/renomeação não reiniciam a paginação. Abas abrem Configurações por padrão e preservam seleção por leito, com Tab/setas/Home/End. Relógio e chamado permanecem no diagnóstico, não no header.
-- **Exceção:** nenhum registro preserva área vazia e desabilita paginação. Nomes/erros longos não ampliam os cards. Em telas menores os cards empilham; verificar 320 a 1920 px e movimento reduzido.
-- **Restaurar:** limpar rascunhos, retornar à primeira página e à aba Configurações; não remover associações reais para este ensaio.
-
-
-### I26 — mapa de calor, área e preenchimento dos painéis
-
-- **Preparar/agir:** abrir Administração, comparar a posição do seletor com Iluminação e Assistência e consultar os dois novos gráficos; navegar por horários com setas/Home/End, hover e toque.
-- **Esperado:** seletor abaixo do título, à esquerda; dois painéis ocupam igualmente a área disponível do card no desktop, sem vão no rodapé e sem ampliar fontes. Mapa com três linhas e 24 horários (dois blocos de 12 até 700 px), preservando totais e durações por hora; tooltip mostra duração incluindo segundos. Área com 24 pontos de totais horários, sem suavização. Último contato e total preservados.
-- **Exceção:** sem observação não vira offline; células sem duração ficam vazias; comunicação zerada mantém linha na base. Atualização igual não reinicia animações, mudança de dados transiciona e movimento reduzido suprime transições. Tooltip fecha com Escape, saída do mouse, perda de foco ou toque fora; toque no ponto mantém o valor visível. Em telas pequenas, conteúdo excedente rola dentro do card, mantendo suas dimensões.
-- **Restaurar:** fechar tooltips e voltar ao leito inicial. Dados sintéticos para mistura de estados, zeros e picos devem ficar em ambiente isolado.
-
-
-### I27 — painel compacto de configurações e diagnóstico
-
-- **Preparar/agir:** comparar as três fontes na aba Configurações; consultar versões/motivos nos detalhes. Em ambiente isolado, testar intenção nova pendente com versão antiga confirmada, recusa e confirmação. Abrir Diagnóstico e detalhes completos.
-- **Esperado:** modo/brilho/agenda/prazo/fuso preservados por fonte; Atual só usa telemetria, sem preencher valores ausentes com intenção. Resultado nos detalhes corresponde somente ao último envio: pendente/recusado não aparece confirmado por causa de versão anterior. Blocos de diagnóstico mostram MQTT e WebSocket separadamente, último contato, relógio, persistência e descartes; faixa mostra uptime, sequência e AJUDA. Todos os campos técnicos anteriores permanecem nos detalhes. Abas/detalhes funcionam por teclado/toque e conservam foco.
-- **Exceção:** falta de runtimeSettings/versão no banco não fabrica dados; sem envio há estado explícito. Falhas de relógio/persistência ficam visíveis mesmo com detalhes fechados. Offline conserva última informação identificada como tal; desconhecido não vira zero ou sucesso. Movimento reduzido suprime animações. Verificar320–1920px e fontes empilhadas no celular.
-- **Restaurar:** voltar ao leito inicial e à aba Configurações, fechar detalhes e finalizar somente os chamados fictícios do ambiente isolado.
-
-
-### I28 — abrangência independente, abas e rolagem do Histórico
-
-- **Preparar/agir:** abrir Histórico, colocar registros na segunda página e mudar só a abrangência dos comandos para Todos os dispositivos. Filtrar resultado/período, alternar Reconhecer/Encerrar e consultar páginas. Repetir mudando somente a abrangência de registros.
-- **Esperado:** header alinhado às demais telas, seletor único. Card alterado recomeça na primeira página; outro mantém filtros, dados e página sem nova consulta desnecessária. Abrangência de registros vale para suas três coleções. Ação em abas mantém resultado/período; Limpar filtros volta a Todas. Navegar entre telas/leitos e retornar preserva o estado daquele perfil. Abas acessíveis por Tab/setas/Home/End, com seleção e painel associados.
-- **Exceção:** resposta atrasada de uma ação não substitui a ação atual; sem dispositivo selecionado não consultar uma rota vazia. Consulta global pode estar vazia. Tabelas mantêm360px, cabeçalhos fixos, rolagem vertical/horizontal grafite/dourada por roda/teclado/toque. Em320–1920px, sem overflow da página; tabela larga rola dentro do componente.
-- **Restaurar:** limpar filtros, selecionar primeira página, Eventos e Todas; devolver as duas abrangências ao dispositivo selecionado.
+O broker da demo não oferece privacidade ou autenticação de autores. Use dados fictícios. Consulte [testes](testes.md) para falhas instrumentadas e [serial](serial.md) para comandos locais.

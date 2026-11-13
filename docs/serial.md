@@ -1,6 +1,6 @@
 # Manual do serial — NightCare
 
-Documento exclusivo dos comandos e ensaios do monitor serial do ESP32. A operação apresentada no pitch está no [manual da interface](manual.md); a preparação dos pacotes está no [README](../README.md).
+Documento exclusivo dos comandos e ensaios do monitor serial do ESP32. A instalação e os pacotes estão no [manual](manual.md); a operação das telas está no [guia da interface](interface.md) e a apresentação no [pitch](pitch.md).
 
 ## Preparar o terminal correto
 
@@ -24,6 +24,32 @@ Use uma linha por comando. Anote os valores antes de testar. Para isolar ensaios
 | `reconhecer`, `encerrar` | transições locais de teste; encerramento exige reconhecimento prévio |
 | `reiniciar` | reinício do ESP32 para ensaiar NVS |
 | `rede off`, `rede on` | apenas demo: pausa/restaura Wi-Fi sem parar o firmware |
+
+## Exemplos de uso
+
+Digite no monitor serial do **ESP32**, não no Git Bash nem no terminal do backend. Pressione Enter após cada linha. Estes exemplos alteram o dispositivo selecionado; anote a configuração original.
+
+Para testar movimento a qualquer hora, sem congelar o relógio:
+
+```text
+auto
+brilho 30
+tempo 5
+agenda 00:00 00:00
+status
+```
+
+Acione o PIR no circuito e aguarde ficar inativo: a luz deve apagar após 5 s simulados. O botão físico **AJUDA** abre o chamado e aciona a sinalização do buzzer; não existe comando serial para simular pressão do botão. Para reconhecer/encerrar localmente um chamado já aberto:
+
+```text
+reconhecer
+status
+encerrar
+```
+
+Para uma falha de rede na demo, envie `rede off`, interaja com o circuito e depois envie `rede on`. Esses comandos não reiniciam o ESP32. Comandos locais não precisam de backend; a interface só recebe suas mudanças quando houver comunicação.
+
+Alterar modo/brilho/prazo/agenda/fuso grava configuração local, mas não incrementa a versão remota. A comparação na Administração pode mostrar valores atuais diferentes da última configuração confirmada. Uma versão remota nova pode substituí-los depois.
 
 ## Ensaios locais
 
@@ -111,7 +137,7 @@ Os passos abaixo se aplicam ao ESP32 do terminal selecionado. Observações de P
 - **Fluxo normal:** envie `rede off`; consulte `status`, altere brilho/modo e use reconhecimento/encerramento locais de um pedido fictício existente. Depois envie `rede on`.
 - **Esperado:** Wi-Fi pausa e retorna; o terminal e os controles locais continuam responsivos. Nenhum comando de rede muda por si só iluminação ou assistência.
 - **Condição anormal:** repetir `rede off`/`rede on` e tentar usar esses comandos em uma compilação TLS.
-- **Tratamento esperado:** repetição não reinicia o dispositivo; TLS não oferece esses comandos de teste. O serial não expõe ocupação da fila nem comprova entrega ao backend; o ensaio completo de fila/perdas está na auditoria técnica.
+- **Tratamento esperado:** repetição não reinicia o dispositivo; TLS não oferece esses comandos de teste. O serial não expõe ocupação da fila nem comprova entrega ao backend; o ensaio completo de fila/perdas está em [testes](testes.md#falhas-recuperação-e-operação).
 - **Restaurar:** `rede on`, `hora real`, configuração original e assistência fictícia finalizada.
 
 ## Restaurar
