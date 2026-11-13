@@ -1020,12 +1020,6 @@ form > button {
   font-size: 12px;
   overflow-wrap: anywhere;
 }
-.admin-disclosure {
-  padding: 14px;
-  background: #322a20;
-  border-radius: 7px;
-  margin: 23px 0;
-}
 .technical-details {
   margin-top: 24px;
   border-top: 1px solid var(--line);
@@ -2150,22 +2144,17 @@ input.brightness-range { appearance:none; -webkit-appearance:none; display:block
 }
 
 /* Administração e consultas mantêm a escala compacta dos painéis operacionais. */
-.admin-page { display:grid; gap:16px; min-width:0; align-items:start; }
+.admin-page { display:grid; gap:16px; min-width:0; align-items:stretch; }
 .admin-page > .card,.admin-registration > .card { padding:20px; min-width:0; }
 .admin-page > .admin-state { padding:16px; }
 .admin-state h2 { font-size:20px; line-height:1.25; margin-bottom:5px; }
 .admin-state .eyebrow { font-size:10px; margin-bottom:4px; }
 .admin-registration { min-width:0; }
-.admin-registration .registration-grid { display:grid; grid-template-columns:1fr; max-height:500px; overflow:auto; padding:4px; }
 .admin-registration h2,.admin-information h2,.history-page h2 { font-size:20px; }
 .admin-registration .hint { font-size:12px; }
 .admin-registration .device-registration { min-width:0; }
 .admin-information .section-title { margin-bottom:16px; gap:10px; }
 .admin-information .eyebrow { margin-bottom:6px; }
-.admin-detail-group { margin-top:12px; border-top:1px solid var(--line); padding-top:12px; font-size:12px; }
-.admin-detail-group > summary { cursor:pointer; font-weight:500; padding:4px 0; }
-.admin-detail-group .detail-list dd { overflow-wrap:anywhere; }
-.admin-detail-group .config-values { grid-template-columns:repeat(2,minmax(0,1fr)); }
 .observation-charts { display:grid; gap:12px; min-width:0; }
 .observation-context { display:flex; align-items:center; gap:8px; color:var(--muted); font-size:11px; }
 .observation-totals { display:flex; flex-wrap:wrap; gap:8px 16px; font-size:10px; color:var(--muted); margin:8px 0; }
@@ -2201,7 +2190,6 @@ input.brightness-range { appearance:none; -webkit-appearance:none; display:block
 @media(min-width:1440px) {
  .admin-page { grid-template-columns:repeat(2,minmax(0,1fr)); }
  .admin-state { grid-column:1/-1; }
- .admin-state .lighting-signals { max-width:480px; margin-left:auto; }
  .history-grid { grid-template-columns:repeat(2,minmax(0,1fr)); }
 }
 @media(max-width:700px) {
@@ -2209,14 +2197,48 @@ input.brightness-range { appearance:none; -webkit-appearance:none; display:block
  .history-filters { grid-template-columns:minmax(0,1fr); }
  .history-tabs { gap:6px; }
  .history-tabs button { padding:8px; }
- .admin-detail-group .config-values { grid-template-columns:1fr; }
 }
 @media(prefers-reduced-motion:reduce) {
  .admin-page.is-active .admin-enter { animation:none; }
  .observation-bar,.observation-message-bar { transition:none; }
 }
 .admin-information .section-title h2,.history-page .section-title h2 { margin:0; font-size:20px; }
-.admin-information .admin-disclosure { margin:12px 0 0; padding:8px 10px; font-size:10px; line-height:1.5; }
 .observation-presence-totals > span::before { content:""; display:inline-block; width:8px; height:8px; border-radius:2px; background:#efd38e; margin-right:5px; }
 .observation-presence-totals > span:nth-child(2)::before { background:#8a819b; }
 .observation-presence-totals > span:nth-child(3)::before { background:#363744; border:1px solid #626271; }
+
+/* Administração: dupla de altura estável e detalhes em card independente. */
+.admin-state { display:grid; grid-template-columns:minmax(0,1fr) minmax(180px,1fr); align-items:center; gap:20px; }
+.admin-state > .device-context { margin:0; padding:0; border:0; border-radius:0; background:transparent; flex-direction:column; align-items:flex-start; min-width:0; gap:8px; }
+.admin-state .bed-picker { width:100%; max-width:260px; }
+.admin-registration,.admin-information { height:600px; min-height:0; }
+.admin-registration > .fleet-admin { height:100%; display:flex; flex-direction:column; min-height:0; }
+.admin-registration .fleet-admin > h2 { margin:0; flex-shrink:0; }
+.admin-registration .fleet-admin > .hint { flex-shrink:0; }
+.admin-registration .registration-grid { display:block; flex:1; min-height:0; max-height:none; overflow:auto; margin:0; padding:4px; scrollbar-gutter:stable; }
+.admin-registration .device-registration[hidden] { display:none; }
+.admin-registration .device-registration { padding-bottom:16px; }
+.admin-registration .device-registration h3 { overflow-wrap:anywhere; }
+.registration-pagination { display:flex; flex-wrap:wrap; align-items:center; justify-content:flex-end; gap:8px; padding-top:14px; border-top:1px solid var(--line); flex-shrink:0; }
+.registration-pagination > span { margin-right:auto; color:var(--muted); font-size:10px; }
+.registration-pagination button { font-size:11px; padding:8px 10px; }
+.admin-information { display:flex; flex-direction:column; }
+.admin-information > .section-title { flex-shrink:0; }
+.admin-observation-scroll { flex:1; min-height:0; overflow:auto; scrollbar-gutter:stable; padding:2px; }
+.admin-technical { grid-column:1/-1; }
+.admin-technical .section-title { margin-bottom:16px; }
+.admin-technical .section-title h2 { font-size:20px; margin:0; }
+.admin-technical .eyebrow { margin-bottom:6px; }
+.admin-technical-tabs { display:flex; flex-wrap:wrap; gap:8px; margin-bottom:16px; }
+.admin-technical-tabs button { font-size:12px; padding:10px 14px; }
+.admin-technical-panel .config-values { grid-template-columns:repeat(2,minmax(0,1fr)); }
+.admin-diagnostics { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:0 24px; }
+.admin-diagnostics > div { min-width:0; }
+.admin-diagnostics dd { overflow-wrap:anywhere; min-width:0; }
+.admin-page.is-active .admin-enter:nth-child(4) { animation-delay:120ms; }
+@media(max-width:700px) {
+ .admin-state { grid-template-columns:minmax(0,1fr); gap:16px; }
+ .admin-registration,.admin-information { height:680px; }
+ .admin-diagnostics,.admin-technical-panel .config-values { grid-template-columns:minmax(0,1fr); }
+ .registration-pagination > span { flex-basis:100%; }
+}

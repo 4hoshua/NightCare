@@ -160,7 +160,7 @@ A barra lateral pode ser expandida ou recolhida. No celular, o botão de menu ab
 | Dashboard | cartões de todos os leitos; ícones e sinais visuais de movimento, luz, relógio, presença e chamados simultâneos |
 | Iluminação e movimento | estado da luz/PIR; cartão único de ajustes com prévia de brilho, horários próprios, detalhes e três gráficos por leito |
 | Assistência | pedido ativo, acionamentos do botão, tempo desde abertura, reconhecer/encerrar e resultados das últimas ações |
-| Administração | header por dispositivo, registro/associação, configurações e diagnóstico, presença e comunicações observadas em 24 horas |
+| Administração | header por dispositivo, registro de dois dispositivos por página, observabilidade em card de mesmo tamanho e detalhes em abas Configurações/Diagnóstico |
 | Histórico | dois cards paginados: Eventos/Chamados/Configurações em abas e Comandos; filtros e consulta global ou por dispositivo |
 
 Os cartões do Dashboard mostram cada estado com ícone, texto e destaque visual: lâmpada dourada com brilho quando acesa e riscada quando apagada, sinal pulsante durante movimento, sino e borda dourada para chamado pendente, confirmação para atendimento reconhecido e alerta para relógio inválido. Ao mudar um valor, há uma transição breve; heartbeats sem mudança não reiniciam essa transição. Sem dados, o cartão informa ausência de informação. Offline ou sem conexão do painel, os indicadores ficam neutros e sem animação de atividade, preservando somente a última informação recebida. Movimento reduzido desativa as animações e mantém ícones/textos/cores. Os botões ficam sempre no rodapé dos cartões; o selo Offline/Sem conexão e os indicadores neutros substituem a mensagem adicional nesses cartões.
@@ -362,6 +362,8 @@ O repositório mantém `flake.nix` e `flake.lock` para desenvolvimento Nix. O au
 
 
 ### Observabilidade e consulta de históricos
+
+A Administração mantém registro e observabilidade com largura/altura iguais, 600 px (680 px até 700 px de largura), empilhados abaixo de 1440 px. A paginação local mostra dois dispositivos por vez, sem redimensionar o card, e preserva rascunhos durante a navegação. Configurações e diagnóstico ficam em um card separado abaixo, com abas acessíveis por teclado.
 
 A Administração coleta presença observada e mensagens MQTT válidas recebidas, por dispositivo. A janela móvel de 24 horas termina no último minuto completo; coleta nova não reconstrói o passado. Online exige estado novo e expira após 45 segundos. Falhas do broker/backend, pausas superiores a 5 segundos e períodos anteriores à coleta são **sem observação**, não offline. Reentregas QoS contam como novos recebimentos; retidos e mensagens inválidas não contam. Último contato ao vivo é separado do último estado salvo. Agregados por minuto permanecem no SQLite por 30 dias, com limpeza horária.
 

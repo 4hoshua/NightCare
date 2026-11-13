@@ -370,7 +370,6 @@ export function DeviceApp({
               active={active}
               deviceContext={deviceContext}
               overview={overview}
-              demo={demo}
             />
           )}
           <div hidden={page !== "historico"}>

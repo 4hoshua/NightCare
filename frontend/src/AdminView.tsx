@@ -1,6 +1,11 @@
-import type { ReactNode } from "react";
+import {
+  useId,
+  useRef,
+  useState,
+  type ReactNode,
+  type KeyboardEvent,
+} from "react";
 import { type Snapshot, type Overview, date } from "./model";
-import { DeviceSignals } from "./DeviceSignals";
 import { FleetAdmin } from "./fleet";
 import { HelpTooltip } from "./HelpTooltip";
 import { ConfigurationDetails } from "./views";
@@ -11,15 +16,27 @@ export function AdminView({
   active,
   deviceContext,
   overview,
-  demo,
 }: {
   snapshot: Snapshot | null;
   connected: boolean;
   active: boolean;
   deviceContext: ReactNode;
   overview: Overview | null;
-  demo: boolean | null;
 }) {
+  const [tab, setTab] = useState<"configuration" | "diagnostics">(
+    "configuration",
+  );
+  const tabId = useId();
+  const tabs = useRef<HTMLDivElement>(null);
+  function tabKeyboard(event: KeyboardEvent<HTMLButtonElement>, index: number) {
+    if (!["ArrowLeft", "ArrowRight", "Home", "End"].includes(event.key)) return;
+    event.preventDefault();
+    const next = event.key === "Home" ? 0 : event.key === "End" ? 1 : 1 - index;
+    setTab(next === 0 ? "configuration" : "diagnostics");
+    tabs.current
+      ?.querySelectorAll<HTMLButtonElement>('[role="tab"]')
+      [next]?.focus();
+  }
   const state = snapshot?.device.state,
     live =
       connected && !!snapshot?.brokerConnected && !!snapshot?.device.online;
@@ -63,7 +80,7 @@ export function AdminView({
   ];
   return (
     <div className={`admin-page ${active ? "is-active" : ""}`}>
-      <section className="card lighting-state admin-state admin-enter">
+      <section className="card admin-state admin-enter">
         <div>
           <p className="eyebrow">ESTADO DO DISPOSITIVO</p>
           <h2>
@@ -75,13 +92,6 @@ export function AdminView({
           </h2>
         </div>
         {deviceContext}
-        <div data-signal-live={live}>
-          <DeviceSignals
-            state={state ?? null}
-            fields={["clock", "assistance"]}
-            className="lighting-signals"
-          />
-        </div>
       </section>
       <div className="admin-registration admin-enter">
         <FleetAdmin overview={overview} connected={connected} />
@@ -93,26 +103,81 @@ export function AdminView({
             <h2>Dispositivo e observabilidade</h2>
           </div>
           <HelpTooltip label="Informações detalhadas">
-            Os indicadores e detalhes correspondem somente ao dispositivo
-            selecionado no cabeçalho. O registro ao lado lista todos os
-            dispositivos da instalação.
+            Os indicadores correspondem somente ao dispositivo selecionado no
+            cabeçalho. O registro ao lado lista todos os dispositivos da
+            instalação.
           </HelpTooltip>
         </div>
-        <ObservationCharts
-          snapshot={snapshot}
-          active={active}
-          connected={connected}
-        />
-        <details className="admin-detail-group">
-          <summary>Configurações do dispositivo</summary>
+        <div
+          className="admin-observation-scroll"
+          tabIndex={0}
+          role="region"
+          aria-label="Indicadores de observabilidade"
+        >
+          <ObservationCharts
+            snapshot={snapshot}
+            active={active}
+            connected={connected}
+          />
+        </div>
+      </section>
+      <section className="card admin-technical admin-enter">
+        <div className="section-title">
+          <div>
+            <p className="eyebrow">INFORMAÇÕES DO DISPOSITIVO</p>
+            <h2>Configurações e diagnóstico</h2>
+          </div>
+        </div>
+        <div
+          className="admin-technical-tabs"
+          ref={tabs}
+          role="tablist"
+          aria-label="Detalhes do dispositivo"
+        >
+          {(
+            [
+              ["configuration", "Configurações"],
+              ["diagnostics", "Diagnóstico"],
+            ] as const
+          ).map(([value, label], index) => (
+            <button
+              key={value}
+              type="button"
+              role="tab"
+              id={`${tabId}-${value}-tab`}
+              aria-controls={`${tabId}-${value}-panel`}
+              aria-selected={tab === value}
+              tabIndex={tab === value ? 0 : -1}
+              className={tab === value ? "" : "secondary"}
+              onClick={() => setTab(value)}
+              onKeyDown={(event) => tabKeyboard(event, index)}
+            >
+              {label}
+            </button>
+          ))}
+        </div>
+        <div
+          className="admin-technical-panel"
+          role="tabpanel"
+          id={`${tabId}-configuration-panel`}
+          aria-labelledby={`${tabId}-configuration-tab`}
+          hidden={tab !== "configuration"}
+          tabIndex={0}
+        >
           <ConfigurationDetails snapshot={snapshot} connected={connected} />
           <a className="text-link" href="#iluminacao">
             Editar iluminação e movimento
           </a>
-        </details>
-        <details className="admin-detail-group">
-          <summary>Diagnóstico e implementação</summary>
-          <dl className="detail-list">
+        </div>
+        <div
+          className="admin-technical-panel"
+          role="tabpanel"
+          id={`${tabId}-diagnostics-panel`}
+          aria-labelledby={`${tabId}-diagnostics-tab`}
+          hidden={tab !== "diagnostics"}
+          tabIndex={0}
+        >
+          <dl className="detail-list admin-diagnostics">
             {diagnostics.map(([label, value]) => (
               <div key={label}>
                 <dt>{label}</dt>
@@ -125,12 +190,7 @@ export function AdminView({
             corresponde ao último estado recebido; perdas são contadas em RAM e
             reiniciam com o dispositivo.
           </p>
-        </details>
-        {demo && (
-          <p className="hint admin-disclosure">
-            Broker público de testes · use somente dados fictícios.
-          </p>
-        )}
+        </div>
       </section>
     </div>
   );

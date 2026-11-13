@@ -373,9 +373,11 @@ export function FleetOverview({
 function DeviceRegistration({
   device,
   connected,
+  visible,
 }: {
   device: NonNullable<Overview>["devices"][number];
   connected: boolean;
+  visible: boolean;
 }) {
   const [name, setName] = useState(""),
     [saving, setSaving] = useState(false),
@@ -396,7 +398,7 @@ function DeviceRegistration({
     }
   }
   return (
-    <article className="device-registration">
+    <article className="device-registration" hidden={!visible}>
       <h3>{device.bed?.name ?? "Dispositivo encontrado"}</h3>
       <p className="mono">{device.deviceId}</p>
       <p>
@@ -446,6 +448,17 @@ export function FleetAdmin({
   overview: Overview | null;
   connected: boolean;
 }) {
+  const [page, setPage] = useState(0);
+  const devices = overview?.devices ?? [];
+  const pages = Math.max(1, Math.ceil(devices.length / 2));
+  const currentPage = Math.min(page, pages - 1);
+  const list = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    setPage((old) => Math.min(old, pages - 1));
+  }, [pages]);
+  useEffect(() => {
+    list.current?.scrollTo(0, 0);
+  }, [currentPage]);
   return (
     <section className="card fleet-admin">
       <h2>Dispositivos e leitos</h2>
@@ -453,21 +466,52 @@ export function FleetAdmin({
         Confirme onde cada dispositivo foi instalado. A associação é permanente
         nesta versão; corrigir o nome não troca o dispositivo.
       </p>
-      {!overview?.devices.length && (
-        <p>
-          Nenhum dispositivo encontrado. Inicie uma simulação com o pacote da
-          instalação.
-        </p>
-      )}
-      <div className="registration-grid">
-        {overview?.devices.map((d) => (
+      <div
+        className="registration-grid"
+        ref={list}
+        tabIndex={0}
+        role="region"
+        aria-label="Dispositivos nesta página"
+      >
+        {!devices.length && (
+          <p className="empty">
+            Nenhum dispositivo encontrado. Inicie uma simulação com o pacote da
+            instalação.
+          </p>
+        )}
+        {devices.map((device, index) => (
           <DeviceRegistration
-            key={d.deviceId}
-            device={d}
+            key={device.deviceId}
+            device={device}
             connected={connected}
+            visible={Math.floor(index / 2) === currentPage}
           />
         ))}
       </div>
+      <nav
+        className="registration-pagination"
+        aria-label="Páginas de dispositivos"
+      >
+        <span role="status">
+          Página {currentPage + 1} de {pages} · {devices.length} dispositivo(s)
+        </span>
+        <button
+          type="button"
+          className="secondary"
+          disabled={currentPage === 0}
+          onClick={() => setPage(currentPage - 1)}
+        >
+          Anterior
+        </button>
+        <button
+          type="button"
+          className="secondary"
+          disabled={currentPage >= pages - 1}
+          onClick={() => setPage(currentPage + 1)}
+        >
+          Próxima
+        </button>
+      </nav>
     </section>
   );
 }
