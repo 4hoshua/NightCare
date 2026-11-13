@@ -1,3 +1,4 @@
+import { AssistanceView } from "./AssistanceView";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { createRoot } from "react-dom/client";
 import {
@@ -11,7 +12,7 @@ import {
   type Overview,
 } from "./model";
 import { Sidebar, Icon, pages, readPage } from "./navigation";
-import { DashboardView, AssistanceView, AdminView, StatusBadge } from "./views";
+import { DashboardView, AdminView, StatusBadge } from "./views";
 import { ArchiveLists, useRecords } from "./records";
 import { FleetOverview, FleetAlerts, FleetAdmin, FleetApp } from "./fleet";
 import { NotificationBell } from "./notifications";
@@ -317,7 +318,10 @@ export function DeviceApp({
               </span>
             </div>
           </div>
-          {page !== "dashboard" && page !== "iluminacao" && deviceContext}
+          {page !== "dashboard" &&
+            page !== "iluminacao" &&
+            page !== "assistencia" &&
+            deviceContext}
           <FleetAlerts
             overview={overview}
             connected={connected}
@@ -372,6 +376,8 @@ export function DeviceApp({
           )}
           {page === "assistencia" && (
             <AssistanceView
+              deviceContext={deviceContext}
+              active={active}
               snapshot={snapshot}
               connected={connected}
               wait={wait}
