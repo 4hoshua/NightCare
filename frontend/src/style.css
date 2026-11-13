@@ -2160,8 +2160,6 @@ input.brightness-range { appearance:none; -webkit-appearance:none; display:block
 .observation-totals { display:flex; flex-wrap:wrap; gap:8px 16px; font-size:10px; color:var(--muted); margin:8px 0; }
 .observation-totals b { font-weight:500; color:var(--ink); margin-left:4px; }
 .observation-plot { min-width:0; }
-.observation-bar { transition:height 350ms ease,y 350ms ease,opacity 350ms ease; }
-.observation-message-bar { transform-origin:0 92px; transition:transform 350ms ease; }
 .admin-page.is-active .admin-enter { animation:lighting-card-enter 220ms ease-out both; }
 .admin-page.is-active .admin-enter:nth-child(2) { animation-delay:40ms; }
 .admin-page.is-active .admin-enter:nth-child(3) { animation-delay:80ms; }
@@ -2200,7 +2198,7 @@ input.brightness-range { appearance:none; -webkit-appearance:none; display:block
 }
 @media(prefers-reduced-motion:reduce) {
  .admin-page.is-active .admin-enter { animation:none; }
- .observation-bar,.observation-message-bar { transition:none; }
+
 }
 .admin-information .section-title h2,.history-page .section-title h2 { margin:0; font-size:20px; }
 .observation-presence-totals > span::before { content:""; display:inline-block; width:8px; height:8px; border-radius:2px; background:#efd38e; margin-right:5px; }
@@ -2208,7 +2206,7 @@ input.brightness-range { appearance:none; -webkit-appearance:none; display:block
 .observation-presence-totals > span:nth-child(3)::before { background:#363744; border:1px solid #626271; }
 
 /* Administração: dupla de altura estável e detalhes em card independente. */
-.admin-state { display:grid; grid-template-columns:minmax(0,1fr) minmax(180px,1fr); align-items:center; gap:20px; }
+.admin-state { display:grid; grid-template-columns:minmax(0,1fr); align-items:start; gap:20px; }
 .admin-state > .device-context { margin:0; padding:0; border:0; border-radius:0; background:transparent; flex-direction:column; align-items:flex-start; min-width:0; gap:8px; }
 .admin-state .bed-picker { width:100%; max-width:260px; }
 .admin-registration,.admin-information { height:600px; min-height:0; }
@@ -2242,3 +2240,36 @@ input.brightness-range { appearance:none; -webkit-appearance:none; display:block
  .admin-diagnostics,.admin-technical-panel .config-values { grid-template-columns:minmax(0,1fr); }
  .registration-pagination > span { flex-basis:100%; }
 }
+
+/* Observabilidade: mapa de calor e área preenchem os painéis sem ampliar fontes. */
+.admin-observation-scroll > .observation-charts { height:100%; min-height:100%; display:flex; flex-direction:column; }
+.observation-charts > .analytics-chart { display:flex; flex-direction:column; flex:1 0 220px; min-height:220px; }
+.observation-charts > .observation-context,.observation-charts > .hint,.observation-charts > .error { flex-shrink:0; }
+.observation-charts .observation-plot { flex:1; min-height:120px; min-width:0; margin-top:8px; position:relative; }
+.observation-area > svg { display:block; max-width:100%; overflow:visible; }
+.observation-area-fill { fill:#c7b08022; stroke:none; transition:d 350ms ease; }
+.observation-area-line { fill:none; stroke:#c7b080; stroke-width:2; stroke-linejoin:round; transition:d 350ms ease; }
+.observation-area-point { fill:#efd38e; stroke:#1b1d26; stroke-width:1; transition:cy 350ms ease,r 150ms ease; }
+.heatmap-blocks { height:100%; display:flex; flex-direction:column; gap:14px; }
+.heatmap-block { display:grid; flex:1; min-height:80px; gap:4px; padding-bottom:22px; }
+.heatmap-labels,.heatmap-hour { display:grid; grid-template-rows:repeat(3,minmax(0,1fr)); gap:5px; }
+.heatmap-labels { color:var(--muted); font-size:10px; line-height:1.2; align-items:center; padding-right:6px; }
+button.heatmap-hour { align-items:stretch; justify-content:stretch; grid-template-columns:minmax(0,1fr); position:relative; min-width:0; width:100%; padding:0; background:transparent; border:0; border-radius:3px; box-shadow:none; }
+button.heatmap-hour:hover:enabled { background:transparent; filter:none; }
+button.heatmap-hour:focus-visible { outline:2px solid var(--accent); outline-offset:2px; }
+.heatmap-cell-track { display:block; background:#ffffff04; border:1px solid #363744; border-radius:3px; overflow:hidden; min-height:0; }
+.heatmap-cell { display:block; width:100%; height:100%; transition:opacity 350ms ease; }
+.heatmap-hour:hover .heatmap-cell-track { border-color:#c7b080; }
+.heatmap-hour-label { position:absolute; bottom:-20px; left:50%; transform:translateX(-50%); font-size:10px; font-weight:400; color:var(--muted); white-space:nowrap; line-height:14px; }
+.observation-presence-totals > span:nth-child(3)::before { background:#4b4758; }
+@media(max-width:700px) {
+ .observation-charts > .analytics-chart { flex-basis:300px; min-height:300px; }
+ .observation-charts .observation-heatmap { min-height:190px; }
+ .heatmap-blocks { gap:8px; }
+ .heatmap-block { gap:3px; }
+}
+@media(prefers-reduced-motion:reduce) {
+ .observation-area-fill,.observation-area-line,.observation-area-point,.heatmap-cell { transition:none; }
+}
+
+.admin-state .eyebrow { line-height:1.4; }

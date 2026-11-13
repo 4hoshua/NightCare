@@ -79,17 +79,37 @@ function useObservation(id: string, active: boolean, connected: boolean) {
     refresh: () => setRefresh((n) => n + 1),
   };
 }
+const presenceRows = [
+  { key: "onlineMs", label: "Online", color: "#efd38e" },
+  { key: "offlineMs", label: "Offline", color: "#8a819b" },
+  { key: "unknownMs", label: "Sem observação", color: "#4b4758" },
+] as const;
+const exactDuration = (ms: number) =>
+  `${Math.floor(ms / 3600000)}h ${Math.floor((ms % 3600000) / 60000)}min ${((ms % 60000) / 1000).toLocaleString("pt-BR", { maximumFractionDigits: 3 })}s`;
 function Plot({ data, presence }: { data: Observation; presence: boolean }) {
-  const [selected, setSelected] = useState<number | null>(null),
-    [width, setWidth] = useState(400),
-    [entered, setEntered] = useState(false);
+  const [selected, setSelected] = useState<number | null>(null);
+  const [size, setSize] = useState({ width: 400, height: 140 });
+  const [entered, setEntered] = useState(false);
+  const [mobile, setMobile] = useState(
+    () => matchMedia("(max-width: 700px)").matches,
+  );
   const ref = useRef<HTMLDivElement>(null);
+  const touchSelection = useRef(false);
   useLayoutEffect(() => {
     const observer = new ResizeObserver(([entry]) =>
-      setWidth(Math.max(400, Math.floor(entry.contentRect.width))),
+      setSize({
+        width: Math.max(160, Math.floor(entry.contentRect.width)),
+        height: Math.max(120, Math.floor(entry.contentRect.height)),
+      }),
     );
     if (ref.current) observer.observe(ref.current);
     return () => observer.disconnect();
+  }, []);
+  useEffect(() => {
+    const media = matchMedia("(max-width: 700px)");
+    const update = () => setMobile(media.matches);
+    media.addEventListener("change", update);
+    return () => media.removeEventListener("change", update);
   }, []);
   useEffect(() => {
     let frame = requestAnimationFrame(() => {
@@ -97,6 +117,17 @@ function Plot({ data, presence }: { data: Observation; presence: boolean }) {
     });
     return () => cancelAnimationFrame(frame);
   }, []);
+  useEffect(() => {
+    if (selected === null) return;
+    const outside = (event: PointerEvent) => {
+      if (!ref.current?.contains(event.target as Node)) {
+        touchSelection.current = false;
+        setSelected(null);
+      }
+    };
+    document.addEventListener("pointerdown", outside);
+    return () => document.removeEventListener("pointerdown", outside);
+  }, [selected]);
   const points = data.hourly.map((h) => ({
     ...h,
     ...data.presence
@@ -110,123 +141,228 @@ function Plot({ data, presence }: { data: Observation; presence: boolean }) {
         { onlineMs: 0, offlineMs: 0, unknownMs: 0 },
       ),
   }));
-  const max = Math.max(1, ...points.map((p) => p.messages)),
-    step = (width - 24) / 24;
   const description = (i: number) => {
     const p = points[i];
-    return `${time(p.from)}–${time(p.to)}: ${presence ? `online ${duration(p.onlineMs)}, offline ${duration(p.offlineMs)}, sem observação ${duration(p.unknownMs)}` : `${p.messages} mensagens recebidas`}`;
+    return `${date(p.from)}–${time(p.to)}\n${
+      presence
+        ? presenceRows
+            .map((r) => `${r.label}: ${exactDuration(p[r.key])}`)
+            .join("\n")
+        : `${p.messages} mensagens recebidas`
+    }`;
   };
-  function keyboard(e: KeyboardEvent<SVGGElement>, i: number) {
-    if (e.key === "Escape") {
+  function keyboard(
+    event: KeyboardEvent<HTMLButtonElement | SVGGElement>,
+    i: number,
+  ) {
+    touchSelection.current = false;
+    if (event.key === "Escape") {
       setSelected(null);
       return;
     }
-    if (!["ArrowLeft", "ArrowRight", "Home", "End"].includes(e.key)) return;
-    e.preventDefault();
+    if (!["ArrowLeft", "ArrowRight", "Home", "End"].includes(event.key)) return;
+    event.preventDefault();
     const n =
-      e.key === "Home"
+      event.key === "Home"
         ? 0
-        : e.key === "End"
-          ? 23
-          : (i + (e.key === "ArrowLeft" ? -1 : 1) + 24) % 24;
+        : event.key === "End"
+          ? points.length - 1
+          : (i + (event.key === "ArrowLeft" ? -1 : 1) + points.length) %
+            points.length;
     ref.current
-      ?.querySelectorAll<SVGGElement>("[data-observation-point]")
+      ?.querySelectorAll<
+        HTMLButtonElement | SVGGElement
+      >("[data-observation-point]")
       [n]?.focus();
   }
+  const max = Math.max(
+    2,
+    Math.ceil(Math.max(...points.map((p) => p.messages)) / 2) * 2,
+  );
+  const { width, height } = size,
+    left = 32,
+    right = width - 12,
+    bottom = height - 25,
+    top = 12;
+  const x = (i: number) =>
+    left + (i * (right - left)) / Math.max(1, points.length - 1);
+  const y = (value: number) =>
+    bottom - (entered ? value / max : 0) * (bottom - top);
+  const line = points
+    .map((p, i) => `${i === 0 ? "M" : "L"}${x(i)},${y(p.messages)}`)
+    .join(" ");
+  const area = `${line} L${x(points.length - 1)},${bottom} L${x(0)},${bottom} Z`;
+  const blocks = mobile ? [points.slice(0, 12), points.slice(12)] : [points];
   return (
-    <div ref={ref} className="observation-plot">
-      <div
-        className="chart-scroll"
-        tabIndex={0}
-        role="region"
-        aria-label={presence ? "Presença por hora" : "Mensagens por hora"}
-      >
-        <svg
-          viewBox={`0 0 ${width} 120`}
-          style={{ width, minWidth: width, height: 120 }}
+    <div
+      ref={ref}
+      className={`observation-plot ${presence ? "observation-heatmap" : "observation-area"}`}
+    >
+      {presence ? (
+        <div
+          className="heatmap-blocks"
           role="group"
-          aria-label={
-            presence
-              ? "Distribuição de presença nas últimas 24 horas"
-              : "Mensagens MQTT válidas nas últimas 24 horas"
-          }
+          aria-label="Mapa de calor da presença por hora"
         >
-          <line x1="12" x2={width - 12} y1="92" y2="92" stroke="#363744" />
-          {points.map((p, i) => {
-            let offset = 0;
-            return (
-              <g
-                key={p.from}
-                data-observation-point
-                tabIndex={0}
-                role="img"
-                aria-label={description(i)}
-                onMouseEnter={() => setSelected(i)}
-                onMouseLeave={() => setSelected(null)}
-                onFocus={() => setSelected(i)}
-                onBlur={() => setSelected(null)}
-                onClick={() => setSelected(i)}
-                onKeyDown={(e) => keyboard(e, i)}
-              >
-                {presence ? (
-                  (
-                    [
-                      ["onlineMs", "#efd38e"],
-                      ["offlineMs", "#8a819b"],
-                      ["unknownMs", "#363744"],
-                    ] as const
-                  ).map(([key, color]) => {
-                    const height = (p[key] / 3600000) * 76;
-                    offset += height;
-                    return (
-                      <rect
-                        key={key}
-                        className="observation-bar"
-                        x={12 + (i + 0.15) * step}
-                        y={92 - offset}
-                        width={step * 0.7}
-                        height={height}
-                        fill={color}
-                        style={{ opacity: entered ? 1 : 0 }}
-                      />
-                    );
-                  })
-                ) : (
-                  <rect
-                    className="observation-message-bar"
-                    x={12 + (i + 0.15) * step}
-                    y="16"
-                    width={step * 0.7}
-                    height="76"
-                    rx="2"
-                    fill="#c7b080"
-                    style={{
-                      transform: `scaleY(${entered ? p.messages / max : 0})`,
+          {blocks.map((block, blockIndex) => (
+            <div
+              className="heatmap-block"
+              key={blockIndex}
+              style={{
+                gridTemplateColumns: `82px repeat(${block.length},minmax(0,1fr))`,
+              }}
+            >
+              <div className="heatmap-labels" aria-hidden="true">
+                {presenceRows.map((r) => (
+                  <span key={r.key}>{r.label}</span>
+                ))}
+              </div>
+              {block.map((p, index) => {
+                const i = blockIndex * 12 + index;
+                return (
+                  <button
+                    key={p.from}
+                    type="button"
+                    className="heatmap-hour"
+                    data-observation-point
+                    aria-label={description(i)}
+                    onPointerEnter={(event) => {
+                      if (event.pointerType === "mouse")
+                        touchSelection.current = false;
                     }}
-                  />
-                )}
-                <rect
-                  x={12 + i * step}
-                  y="12"
-                  width={step}
-                  height="82"
-                  fill="transparent"
-                />
-                {i % 4 === 0 && (
-                  <text
-                    x={12 + (i + 0.5) * step}
-                    y="110"
-                    textAnchor="middle"
-                    className="chart-label"
+                    onPointerDown={(event) => {
+                      touchSelection.current = event.pointerType === "touch";
+                    }}
+                    onMouseEnter={() => setSelected(i)}
+                    onMouseLeave={() => {
+                      if (!touchSelection.current) setSelected(null);
+                    }}
+                    onFocus={() => setSelected(i)}
+                    onBlur={() => setSelected(null)}
+                    onClick={() => setSelected(i)}
+                    onKeyDown={(e) => keyboard(e, i)}
                   >
-                    {time(p.from)}
-                  </text>
-                )}
+                    {presenceRows.map((r) => (
+                      <span key={r.key} className="heatmap-cell-track">
+                        <i
+                          className="heatmap-cell"
+                          data-state={r.key}
+                          data-duration-ms={p[r.key]}
+                          style={{
+                            background: r.color,
+                            opacity: entered
+                              ? Math.max(
+                                  0,
+                                  Math.min(1, p[r.key] / (p.to - p.from)),
+                                )
+                              : 0,
+                          }}
+                        />
+                      </span>
+                    ))}
+                    {index % (mobile ? 3 : 4) === 0 && (
+                      <span className="heatmap-hour-label" aria-hidden="true">
+                        {time(p.from)}
+                      </span>
+                    )}
+                  </button>
+                );
+              })}
+            </div>
+          ))}
+        </div>
+      ) : (
+        <svg
+          viewBox={`0 0 ${width} ${height}`}
+          width={width}
+          height={height}
+          role="group"
+          aria-label="Área de mensagens MQTT recebidas por hora"
+        >
+          <g className="chart-axis" aria-hidden="true">
+            {[0, 0.5, 1].map((f) => (
+              <g key={f}>
+                <line
+                  x1={left}
+                  x2={right}
+                  y1={bottom - f * (bottom - top)}
+                  y2={bottom - f * (bottom - top)}
+                />
+                <text
+                  x={left - 6}
+                  y={bottom - f * (bottom - top) + 3}
+                  textAnchor="end"
+                >
+                  {(max * f).toLocaleString("pt-BR", {
+                    maximumFractionDigits: 1,
+                  })}
+                </text>
               </g>
-            );
-          })}
+            ))}
+          </g>
+          <path
+            className="observation-area-fill"
+            d={area}
+            style={{ d: `path("${area}")` }}
+            aria-hidden="true"
+          />
+          <path
+            className="observation-area-line"
+            d={line}
+            style={{ d: `path("${line}")` }}
+            aria-hidden="true"
+          />
+          {points.map((p, i) => (
+            <g
+              key={p.from}
+              data-observation-point
+              tabIndex={0}
+              role="img"
+              aria-label={description(i)}
+              onPointerEnter={(event) => {
+                if (event.pointerType === "mouse")
+                  touchSelection.current = false;
+              }}
+              onPointerDown={(event) => {
+                touchSelection.current = event.pointerType === "touch";
+              }}
+              onMouseEnter={() => setSelected(i)}
+              onMouseLeave={() => {
+                if (!touchSelection.current) setSelected(null);
+              }}
+              onFocus={() => setSelected(i)}
+              onBlur={() => setSelected(null)}
+              onClick={() => setSelected(i)}
+              onKeyDown={(e) => keyboard(e, i)}
+            >
+              <circle
+                className="observation-area-point"
+                cx={x(i)}
+                cy={y(p.messages)}
+                r={selected === i ? 4 : 2.5}
+              />
+              <rect
+                x={x(i) - (right - left) / 46}
+                y={top - 4}
+                width={(right - left) / 23}
+                height={bottom - top + 8}
+                fill="transparent"
+              />
+              {i % (width < 400 ? 6 : 4) === 0 && (
+                <text
+                  x={x(i)}
+                  y={height - 6}
+                  textAnchor="middle"
+                  className="chart-label"
+                  aria-hidden="true"
+                >
+                  {time(p.from)}
+                </text>
+              )}
+            </g>
+          ))}
         </svg>
-      </div>
+      )}
       <p className="chart-tooltip" aria-live="polite">
         {selected === null ? "" : description(selected)}
       </p>
@@ -282,10 +418,12 @@ export function ObservationCharts({
             <div className="chart-title">
               <h3>Presença observada</h3>
               <HelpTooltip label="Presença observada">
-                Cada barra distribui uma hora entre online, offline e sem
-                observação. Online exige estado novo e expira após 45 segundos;
-                mensagem retida não confirma presença. Períodos sem observação
-                não entram como offline.
+                Cada coluna representa uma hora; as três linhas indicam online,
+                offline e sem observação. A intensidade de cada célula mostra a
+                fração daquela hora no estado; célula vazia significa zero.
+                Online exige estado novo e expira após 45 segundos; mensagem
+                retida não confirma presença. Períodos sem observação não entram
+                como offline.
               </HelpTooltip>
             </div>
             <div className="observation-totals observation-presence-totals">
@@ -311,8 +449,10 @@ export function ObservationCharts({
               <HelpTooltip label="Comunicações recebidas">
                 Mensagens MQTT válidas, não retidas, recebidas pelo backend:
                 estado, eventos, disponibilidade e confirmações correlacionadas.
-                Reentregas QoS contam novamente. Não mede requisições HTTP,
-                latência ou todos os envios do dispositivo.
+                Cada ponto soma os recebimentos de uma hora; a linha liga esses
+                totais sem estimar valores entre horários. Reentregas QoS contam
+                novamente. Não mede requisições HTTP, latência ou todos os
+                envios do dispositivo.
               </HelpTooltip>
             </div>
             <div className="observation-totals">
