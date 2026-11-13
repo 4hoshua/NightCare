@@ -5,10 +5,10 @@ import {
   type ReactNode,
   type KeyboardEvent,
 } from "react";
-import { type Snapshot, type Overview, date } from "./model";
+import { type Snapshot, type Overview } from "./model";
 import { FleetAdmin } from "./fleet";
 import { HelpTooltip } from "./HelpTooltip";
-import { ConfigurationDetails } from "./views";
+import { ConfigurationPanel, DiagnosticPanel } from "./TechnicalPanels";
 import { ObservationCharts } from "./ObservationCharts";
 export function AdminView({
   snapshot,
@@ -40,44 +40,6 @@ export function AdminView({
   const state = snapshot?.device.state,
     live =
       connected && !!snapshot?.brokerConnected && !!snapshot?.device.online;
-  const diagnostics: [string, string | number][] = [
-    ["Dispositivo", snapshot?.device.deviceId ?? "—"],
-    [
-      "Comunicação MQTT",
-      connected
-        ? snapshot?.brokerConnected
-          ? "Conectada"
-          : "Desconectada"
-        : "Sem atualização",
-    ],
-    ["Atualizações WebSocket", connected ? "Conectadas" : "Desconectadas"],
-    ["Última comunicação", date(snapshot?.device.lastSeen ?? null)],
-    ["Inicialização (boot)", state?.bootId ?? "—"],
-    [
-      "Tempo em execução no último estado",
-      state ? `${Math.floor(state.uptimeMs / 1000)} s` : "—",
-    ],
-    ["Sequência do estado", state?.sequence ?? "—"],
-    [
-      "Persistência no dispositivo",
-      state
-        ? state.persistenceOk
-          ? "Operacional"
-          : "Falha"
-        : "Sem informação",
-    ],
-    [
-      "Relógio",
-      state
-        ? state.clockValid
-          ? "Sincronizado"
-          : "Inválido ou em teste"
-        : "Sem informação",
-    ],
-    ["Eventos descartados", state?.droppedEvents ?? "—"],
-    ["Acionamentos do botão AJUDA", state?.pressCount ?? "—"],
-    ["Identificador do chamado", state?.requestId ?? "—"],
-  ];
   return (
     <div className={`admin-page ${active ? "is-active" : ""}`}>
       <section className="card admin-state admin-enter">
@@ -164,10 +126,7 @@ export function AdminView({
           hidden={tab !== "configuration"}
           tabIndex={0}
         >
-          <ConfigurationDetails snapshot={snapshot} connected={connected} />
-          <a className="text-link" href="#iluminacao">
-            Editar iluminação e movimento
-          </a>
+          <ConfigurationPanel snapshot={snapshot} connected={connected} />
         </div>
         <div
           className="admin-technical-panel"
@@ -177,19 +136,7 @@ export function AdminView({
           hidden={tab !== "diagnostics"}
           tabIndex={0}
         >
-          <dl className="detail-list admin-diagnostics">
-            {diagnostics.map(([label, value]) => (
-              <div key={label}>
-                <dt>{label}</dt>
-                <dd>{value}</dd>
-              </div>
-            ))}
-          </dl>
-          <p className="hint">
-            Presença expira após 45 segundos sem estado novo. O uptime
-            corresponde ao último estado recebido; perdas são contadas em RAM e
-            reiniciam com o dispositivo.
-          </p>
+          <DiagnosticPanel snapshot={snapshot} connected={connected} />
         </div>
       </section>
     </div>
