@@ -4,6 +4,8 @@ Este é o documento principal para apresentar e operar o NightCare. Os comandos 
 
 ## Preparação da apresentação
 
+O início normal com `scripts/demo.sh` abre uma sessão vazia: copie o novo `mqtt_demo.h` para o Wokwi e cadastre os leitos após os dispositivos conectarem. Para continuar os cadastros da sessão atual, execute `bash scripts/demo.sh --resume`. A opção `--devices` prepara os pacotes; ela não registra leitos.
+
 Prepare dois pacotes, um para `nightcare-001` e outro para `nightcare-002`, conforme o README. Abra dois projetos/cópias distintos no Wokwi em janelas separadas, cada uma com os quatro arquivos do seu pacote. Mantenha ambas em execução e visíveis quando possível. Não duplique a identidade de uma simulação.
 
 Abra o dashboard em `/`. Na Administração, confira os dois dispositivos encontrados e o recebimento de estado novo. Em uma instalação nova, associe um ao **Leito 1** e o outro ao **Leito 2**. Em banco migrado, o dispositivo anterior já estará no Leito 1: confirme apenas o novo. A associação é permanente nesta versão; o nome pode ser corrigido.

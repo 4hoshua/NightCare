@@ -90,6 +90,10 @@ Não há segredos a solicitar ou configurar no modo demo. O prefixo exclusivo ev
 
 ## Dois leitos, duas simulações e descoberta
 
+Cada execução de `bash scripts/demo.sh --devices nightcare-001` inicia uma **sessão vazia**, com banco e namespace MQTT novos. Nenhum leito é cadastrado pelo script: inicie o dispositivo no Wokwi e confirme a associação em Administração. Copie o novo `mqtt_demo.h` gerado para o Wokwi a cada sessão; projetos com o namespace anterior não aparecem na nova sessão.
+
+Para continuar a sessão atual com seus cadastros e histórico, use `bash scripts/demo.sh --resume` (ou `--resume --dev`). Os volumes anteriores são preservados; a configuração e os pacotes da sessão anterior ficam em `.validation/demo-sessions/<identificador>/`. `--prepare-only` apenas prepara arquivos da sessão atual, sem trocar seu namespace. `--devices` escolhe os pacotes a preparar, não cadastra leitos nem filtra dispositivos descobertos.
+
 ```bash
 bash scripts/demo.sh --devices nightcare-001,nightcare-002
 # Para preparar sem iniciar o backend:
@@ -106,7 +110,7 @@ O backend descobre mensagens válidas **dentro do namespace da instalação**; n
 
 A associação exige dispositivo online, ID ainda sem leito e nome único (desconsiderando maiúsculas/minúsculas). É permanente nesta versão: não há transferência, desassociação, exclusão ou substituição. É possível corrigir o nome sem mudar o vínculo. Dispositivos ainda sem leito continuam visíveis, inclusive com chamados conhecidos, mas não recebem configuração ou atendimento remoto antes da confirmação.
 
-IDs aceitam 1–32 letras ASCII, números, `_` e `-`; `nightcare-backend` e `nightcare-health` são reservados. São permanentes por pacote e não dependem do MAC simulado. Reexecutar a preparação preserva o namespace e acrescenta pacotes, sem apagar identidades anteriores. Não execute duas simulações com o mesmo pacote/client ID. O backend não consegue autenticar ou distinguir clones que imitem uma identidade no broker público.
+IDs aceitam 1–32 letras ASCII, números, `_` e `-`; `nightcare-backend` e `nightcare-health` são reservados. São permanentes por pacote e não dependem do MAC simulado. Com `--prepare-only` ou `--resume`, preparar mais pacotes preserva o namespace e acrescenta identidades. Uma execução normal inicia outra sessão com os IDs solicitados. Não execute duas simulações com o mesmo pacote/client ID. O backend não consegue autenticar ou distinguir clones que imitem uma identidade no broker público.
 
 Um banco antigo é migrado em transação: dados de `nightcare-001` permanecem disponíveis como **Leito 1**. Esse vínculo não precisa ser confirmado de novo; seu nome pode ser corrigido. Instalação nova começa sem leitos e exige confirmação de cada dispositivo. Configurações e históricos anteriores ao vínculo continuam ligados ao deviceId e ficam consultáveis pelo leito após associação; renomear atualiza o rótulo exibido.
 
@@ -321,7 +325,7 @@ docker compose --env-file .env.demo -p nightcare-demo -f compose.demo.yml down
 ### Editar a interface com atualização automática no Docker
 
 ```bash
-bash scripts/demo.sh --dev
+bash scripts/demo.sh --resume --dev
 ```
 
 Abra **http://localhost:5173** e edite os arquivos em `frontend/`. Ao salvar, o Vite atualiza CSS imediatamente e recarrega a página quando necessário para alterações em React/TypeScript ou HTML. Não é necessário reconstruir a imagem nem reiniciar contêineres a cada edição. Uma recarga pode perder rascunhos e a ativação de áudio da página. O monitoramento usa polling para reconhecer também edições pelo Windows/WSL com Docker Desktop. Se 5173 estiver ocupada, use `DEV_HTTP_PORT=5174 bash scripts/demo.sh --dev`.

@@ -21,3 +21,4 @@ services:
       start_period: 20s
 volumes:
   demo_sqlite:
+    name: ${DEMO_DATA_VOLUME:-nightcare-demo_demo_sqlite}

@@ -7,6 +7,7 @@ import shutil
 
 parser = argparse.ArgumentParser()
 parser.add_argument('--devices')
+parser.add_argument('--new-session', action='store_true')
 args = parser.parse_args()
 root = pathlib.Path(__file__).resolve().parent.parent
 env = root / '.env.demo'
@@ -26,7 +27,7 @@ requested = args.devices.split(',') if args.devices else previous
 if any(not re.fullmatch(r'[A-Za-z0-9_-]{1,32}', d) or d in ('nightcare-backend', 'nightcare-health') for d in previous + requested) or len(set(requested)) != len(requested) or len(set(previous)) != len(previous):
     raise SystemExit('IDs devem ser distintos, com 1–32 letras ASCII, números, _ ou -; IDs de serviço são reservados.')
 # Adicionar pacotes não apaga identidades nem pacotes anteriores.
-devices = list(dict.fromkeys(['nightcare-001'] + previous + requested))
+devices = list(dict.fromkeys(['nightcare-001'] + ([] if args.new_session and args.devices else previous) + requested))
 prefix = f'nightcare/demo/{ident}/'
 def header(device):
     return f'''#pragma once
@@ -42,9 +43,20 @@ def header(device):
 static const char MQTT_CA[] = "";
 '''
 # Recusar arquivos de outra instalação antes de qualquer gravação.
-for target, device in [(root/'Wokwi/mqtt_demo.h', 'nightcare-001'), *[(root/f'Wokwi/demo/{d}/mqtt_demo.h', d) for d in devices]]:
+for target, device in [(root/'Wokwi/mqtt_demo.h', 'nightcare-001'), *[(root/f'Wokwi/demo/{d}/mqtt_demo.h', d) for d in set(devices + previous)]]:
     if target.exists() and (f'#define MQTT_TOPIC_PREFIX "{prefix}{device}/"' not in target.read_text(encoding='utf-8') or ('#define NIGHTCARE_DEVICE_ID' in target.read_text(encoding='utf-8') and f'#define NIGHTCARE_DEVICE_ID "{device}"' not in target.read_text(encoding='utf-8'))):
         raise SystemExit(f'Arquivo {target.relative_to(root)} pertence a outra instalação; nada foi sobrescrito.')
+if args.new_session:
+    # Arquiva os pacotes públicos; o volume SQLite anterior não é removido.
+    if env.exists():
+        archive = root/'.validation/demo-sessions'/ident
+        archive.mkdir(parents=True, exist_ok=False)
+        shutil.copyfile(env, archive/'.env.demo')
+        if (root/'Wokwi/demo').exists():
+            shutil.move(str(root/'Wokwi/demo'), str(archive/'Wokwi-demo'))
+    ident = secrets.token_hex(8)
+    prefix = f'nightcare/demo/{ident}/'
+    print('Nova sessão vazia. Copie o mqtt_demo.h gerado para cada projeto Wokwi antes de iniciar a simulação.')
 # O alias mantém a preparação simples e a compilação padrão em nightcare-001.
 (root/'Wokwi/mqtt_demo.h').write_text(header('nightcare-001'), encoding='utf-8')
 for device in devices:
@@ -59,5 +71,6 @@ base=root/'Wokwi/demo'
 for name in ['sketch.ino','diagram.json','libraries.txt','mqtt_demo.h']:
     shutil.copyfile(base/'nightcare-001'/name,base/name)
 (base/'wokwi.toml').write_text("[wokwi]\nversion = 1\nfirmware = '../../.pio/build/esp32demo/firmware.bin'\nelf = '../../.pio/build/esp32demo/firmware.elf'\n", encoding='utf-8')
-env.write_text(f'MQTT_URL=mqtt://broker.emqx.io:1883\nMQTT_PREFIX={prefix}\nMQTT_CLIENT_ID=nightcare-{ident}-backend\nDEMO_DEVICES={",".join(devices)}\n', encoding='utf-8')
+volume = f'nightcare-demo-{ident}-sqlite' if args.new_session else values.get('DEMO_DATA_VOLUME', 'nightcare-demo_demo_sqlite')
+env.write_text(f'MQTT_URL=mqtt://broker.emqx.io:1883\nMQTT_PREFIX={prefix}\nMQTT_CLIENT_ID=nightcare-{ident}-backend\nDEMO_DEVICES={",".join(devices)}\nDEMO_DATA_VOLUME={volume}\n', encoding='utf-8')
 print('Pacotes prontos: '+', '.join(f'Wokwi/demo/{d}/' for d in devices))
