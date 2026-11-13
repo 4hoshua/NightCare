@@ -134,6 +134,14 @@ export async function buildApp(
       nameSchema.parse(req.body).name,
     ),
   );
+  app.get("/api/devices/:deviceId/lighting-analytics", async (req) => {
+    const id = deviceParams.parse(req.params).deviceId;
+    const query = z
+      .object({ period: z.enum(["24h", "7d", "30d"]).default("24h") })
+      .strict()
+      .parse(req.query);
+    return store.lightingAnalytics(id, query.period);
+  });
   app.get("/api/devices/:deviceId/status", async (req) => {
     const id = deviceParams.parse(req.params).deviceId;
     store.requireDevice(id);

@@ -1,4 +1,4 @@
-import type { Dispatch, FormEvent, SetStateAction } from "react";
+import type { Dispatch, SetStateAction } from "react";
 import {
   date,
   eventNames,
@@ -52,7 +52,7 @@ function Metric({
     </article>
   );
 }
-function Freshness({ snapshot, connected }: LiveProps) {
+export function Freshness({ snapshot, connected }: LiveProps) {
   const live = connected && snapshot?.device.online;
   return (
     <p className={`freshness ${live ? "live" : ""}`}>
@@ -151,7 +151,7 @@ function ConfigValues({ settings }: { settings: Settings }) {
     </dl>
   );
 }
-export function ConfigurationSummary({ snapshot, connected }: LiveProps) {
+export function ConfigurationDetails({ snapshot, connected }: LiveProps) {
   const state = snapshot?.device.state;
   const applied =
     snapshot?.appliedConfig ??
@@ -162,14 +162,7 @@ export function ConfigurationSummary({ snapshot, connected }: LiveProps) {
     );
   const desired = snapshot?.configs[0];
   return (
-    <section className="card configuration-summary">
-      <div className="section-title">
-        <div>
-          <p className="eyebrow">CONFIGURAÇÃO DO AMBIENTE</p>
-          <h2>O que está em uso</h2>
-        </div>
-        <Icon name="settings" />
-      </div>
+    <>
       <Freshness snapshot={snapshot} connected={connected} />
       <div className="actual-values">
         <div>
@@ -252,11 +245,28 @@ export function ConfigurationSummary({ snapshot, connected }: LiveProps) {
           <>
             <p className="hint">Versão {desired.config_version}</p>
             <ConfigValues settings={desired.payload} />
+            {desired.reason && (
+              <p className="hint">Resultado informado: {desired.reason}</p>
+            )}
           </>
         ) : (
           <p className="hint">Nenhuma configuração enviada pelo painel.</p>
         )}
       </div>
+    </>
+  );
+}
+export function ConfigurationSummary({ snapshot, connected }: LiveProps) {
+  return (
+    <section className="card configuration-summary">
+      <div className="section-title">
+        <div>
+          <p className="eyebrow">CONFIGURAÇÃO DO AMBIENTE</p>
+          <h2>O que está em uso</h2>
+        </div>
+        <Icon name="settings" />
+      </div>
+      <ConfigurationDetails snapshot={snapshot} connected={connected} />
     </section>
   );
 }
@@ -413,172 +423,6 @@ export function DashboardView({ snapshot, connected }: LiveProps) {
             <Icon name="arrow" />
           </a>
         </section>
-      </div>
-    </>
-  );
-}
-
-type LightingProps = LiveProps & {
-  form: Settings;
-  dirty: boolean;
-  saving: boolean;
-  change: <K extends keyof Settings>(key: K, value: Settings[K]) => void;
-  save: (e: FormEvent) => void;
-  quickMode: (mode: Settings["mode"]) => void;
-  canConfigure: boolean;
-};
-export function LightingView({
-  snapshot,
-  connected,
-  form,
-  dirty,
-  saving,
-  change,
-  save,
-  quickMode,
-  canConfigure,
-}: LightingProps) {
-  const state = snapshot?.device.state;
-  return (
-    <>
-      <section className="lighting-status card">
-        <div>
-          <p className="eyebrow">ESTADO DO AMBIENTE</p>
-          <h2>
-            {state
-              ? state.lightOn
-                ? "O caminho está iluminado."
-                : "Iluminação em espera."
-              : "Aguardando o primeiro estado."}
-          </h2>
-          <Freshness snapshot={snapshot} connected={connected} />
-        </div>
-        <div className="lighting-indicators">
-          <div>
-            <Icon name="light" />
-            <span>
-              Luz
-              <strong>
-                {state ? (state.lightOn ? "Acesa" : "Apagada") : "—"}
-              </strong>
-            </span>
-          </div>
-          <div>
-            <Icon name="motion" />
-            <span>
-              Movimento
-              <strong>
-                {state ? (state.motion ? "Detectado" : "Sem movimento") : "—"}
-              </strong>
-            </span>
-          </div>
-        </div>
-      </section>
-      <div className="two-columns lighting-columns">
-        <section className="card">
-          <div className="section-title">
-            <div>
-              <p className="eyebrow">PREFERÊNCIAS DE ILUMINAÇÃO</p>
-              <h2>Ajuste para o ambiente</h2>
-            </div>
-            <Icon name="settings" />
-          </div>
-          <fieldset
-            className="quick-modes"
-            disabled={saving || !connected || !canConfigure}
-          >
-            <legend>Troca rápida de modo</legend>
-            <div className="actions">
-              {(["AUTO", "ON", "OFF"] as const).map((mode) => (
-                <button
-                  key={mode}
-                  type="button"
-                  className={state?.mode === mode ? "" : "secondary"}
-                  aria-pressed={state?.mode === mode}
-                  onClick={() => quickMode(mode)}
-                >
-                  {names[mode]}
-                </button>
-              ))}
-            </div>
-            <p className="hint">
-              Envia somente a mudança de modo com os últimos parâmetros
-              enviados. Edições abaixo são preservadas.
-            </p>
-          </fieldset>
-          <form onSubmit={save}>
-            <label>
-              Modo
-              <Select<Settings["mode"]>
-                label="Modo"
-                value={form.mode}
-                onValueChange={(value) => change("mode", value)}
-                options={[
-                  { value: "AUTO", label: "Automático" },
-                  { value: "ON", label: "Ligado" },
-                  { value: "OFF", label: "Desligado" },
-                ]}
-              />
-            </label>
-            <div className="fields">
-              <label>
-                Brilho (%)
-                <input
-                  type="number"
-                  min="1"
-                  max="100"
-                  required
-                  value={form.brightnessPct}
-                  onChange={(e) =>
-                    change("brightnessPct", Number(e.target.value))
-                  }
-                />
-              </label>
-              <label>
-                Prazo após movimento (s)
-                <input
-                  type="number"
-                  min="1"
-                  max="600"
-                  required
-                  value={form.offDelaySec}
-                  onChange={(e) =>
-                    change("offDelaySec", Number(e.target.value))
-                  }
-                />
-              </label>
-              <label>
-                Início da agenda
-                <input
-                  type="time"
-                  required
-                  value={form.startTime}
-                  onChange={(e) => change("startTime", e.target.value)}
-                />
-              </label>
-              <label>
-                Fim da agenda
-                <input
-                  type="time"
-                  required
-                  value={form.endTime}
-                  onChange={(e) => change("endTime", e.target.value)}
-                />
-              </label>
-            </div>
-            <p className="hint">
-              São Paulo · UTC−3. Horários iguais habilitam 24 h. O botão de
-              ajuda funciona a qualquer hora.
-            </p>
-            <button disabled={saving || !connected || !canConfigure}>
-              {saving ? "Enviando…" : "Enviar configuração"}
-            </button>
-            {dirty && (
-              <span className="edit-label"> Alterações não enviadas</span>
-            )}
-          </form>
-        </section>
-        <ConfigurationSummary snapshot={snapshot} connected={connected} />
       </div>
     </>
   );

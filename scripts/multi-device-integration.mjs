@@ -75,7 +75,12 @@ if(process.argv[2]==='serve'){
    assert.equal(read.unreadCount,0);
    await until(()=>snapshot.notifications.latestId>=notifications.latestId);
    assert.equal(snapshot.notifications.installationId,notifications.installationId);
-   assert.ifError(error);console.log('PASS multi: discovery/association, separate motion/config, simultaneous calls, scoped ACK/CLOSE, global history and one-device Last Will; persistent notification API and WebSocket metadata');
+   const lighting=(await api(`/api/devices/${ids[0]}/lighting-analytics?period=7d`)).data;
+   assert.equal(lighting.deviceId,ids[0]);assert.equal(lighting.period,'7d');assert.equal(lighting.hourlyMovements.length,24);
+   assert.equal(lighting.agendaReference.startTime,'00:00');assert.equal(lighting.agendaReference.endTime,'00:00');
+   assert.equal(lighting.agendaReference.source,'telemetry');assert.equal(lighting.timezoneOffsetHours,-3);
+   assert.equal((await api(`/api/devices/${ids[0]}/lighting-analytics?period=invalid`)).status,400);
+   assert.ifError(error);console.log('PASS multi: discovery/association, separate motion/config, simultaneous calls, scoped ACK/CLOSE, global history and one-device Last Will; persistent notifications, lighting analytics and WebSocket metadata');
  }finally{
    ws?.terminate();for(const d of clients){clearInterval(d.heartbeat);if(d.client.connected){for(const suffix of ['state','availability','config/set'])await d.client.publishAsync(d.prefix+suffix,'',{qos:1,retain:true});await d.client.endAsync();}}
  }

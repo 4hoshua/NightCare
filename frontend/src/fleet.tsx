@@ -1,6 +1,7 @@
 import { useEffect, useId, useRef, useState, type ReactNode } from "react";
-import { api, date, names, type Overview, type Device } from "./model";
-import { Icon, type IconName } from "./navigation";
+import { api, date, names, type Overview } from "./model";
+import { Icon } from "./navigation";
+import { DeviceSignals } from "./DeviceSignals";
 import { NotificationProvider } from "./notifications";
 export type FleetDeviceProps = {
   deviceId: string;
@@ -142,6 +143,15 @@ export function FleetApp({
     if (page) url.hash = page;
     if (url.href !== location.href) history.pushState(null, "", url);
     window.dispatchEvent(new HashChangeEvent("hashchange"));
+    if (!page)
+      requestAnimationFrame(() => {
+        document
+          .getElementById(`page-content-${id}`)
+          ?.querySelector<HTMLButtonElement>(
+            '.device-context [role="combobox"]',
+          )
+          ?.focus({ preventScroll: true });
+      });
   }
   const ids = overview?.devices.length
     ? overview.devices.map((d) => d.deviceId)
@@ -245,115 +255,13 @@ function AnimatedBedCard({
     <section
       className={`card bed-card ${visible ? "bed-card-enter" : "bed-card-exit"}`}
       data-live={live}
+      data-signal-live={live}
       data-assistance={assistance ?? "UNKNOWN"}
       aria-hidden={!visible || undefined}
       inert={!visible}
     >
       {children}
     </section>
-  );
-}
-function BedSignal({
-  label,
-  icon,
-  value,
-  tone,
-  kind,
-}: {
-  label: string;
-  icon: IconName;
-  value: string;
-  tone:
-    | "quiet"
-    | "light"
-    | "motion"
-    | "pending"
-    | "confirmed"
-    | "warning"
-    | "unknown";
-  kind: "motion" | "lighting" | "assistance" | "clock";
-}) {
-  return (
-    <div className={`bed-signal bed-signal-${kind} is-${tone}`}>
-      <dt>
-        <span className="bed-signal-icon">
-          <Icon name={icon} />
-        </span>
-        <span>{label}</span>
-      </dt>
-      <dd className="bed-signal-value" key={value}>
-        {value}
-      </dd>
-    </div>
-  );
-}
-function BedSignals({ state }: { state: Device["state"] }) {
-  const help = state?.assistanceStatus;
-  return (
-    <dl className="bed-signals">
-      <BedSignal
-        label="Movimento"
-        kind="motion"
-        icon={!state ? "unknown" : state.motion ? "motion" : "motion-idle"}
-        tone={!state ? "unknown" : state.motion ? "motion" : "quiet"}
-        value={
-          !state
-            ? "Sem informação"
-            : state.motion
-              ? "Detectado"
-              : "Sem movimento"
-        }
-      />
-      <BedSignal
-        label="Luz"
-        kind="lighting"
-        icon={!state ? "unknown" : state.lightOn ? "light-on" : "light-off"}
-        tone={!state ? "unknown" : state.lightOn ? "light" : "quiet"}
-        value={
-          !state
-            ? "Sem informação"
-            : state.lightOn
-              ? `Acesa · ${state.brightnessPct}%`
-              : "Apagada"
-        }
-      />
-      <BedSignal
-        label="Assistência"
-        kind="assistance"
-        icon={
-          !state
-            ? "unknown"
-            : help === "PENDING"
-              ? "help"
-              : help === "ACKNOWLEDGED"
-                ? "help-check"
-                : "check"
-        }
-        tone={
-          !state
-            ? "unknown"
-            : help === "PENDING"
-              ? "pending"
-              : help === "ACKNOWLEDGED"
-                ? "confirmed"
-                : "quiet"
-        }
-        value={state ? names[state.assistanceStatus] : "Sem informação"}
-      />
-      <BedSignal
-        label="Relógio"
-        kind="clock"
-        icon={!state ? "unknown" : state.clockValid ? "clock-check" : "warning"}
-        tone={!state ? "unknown" : state.clockValid ? "confirmed" : "warning"}
-        value={
-          !state
-            ? "Sem informação"
-            : state.clockValid
-              ? "Sincronizado"
-              : "Inválido ou em teste"
-        }
-      />
-    </dl>
   );
 }
 export function FleetOverview({
@@ -421,7 +329,7 @@ export function FleetOverview({
               </span>
             </div>
             <p className="mono">{d.deviceId}</p>
-            <BedSignals state={d.state} />
+            <DeviceSignals state={d.state} />
             <div className="actions">
               <button onClick={() => onSelect(d.deviceId, "iluminacao")}>
                 Abrir iluminação

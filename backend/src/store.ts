@@ -1,4 +1,10 @@
 import Database from "better-sqlite3";
+import {
+  EVENT_TIME_SQL,
+  lightingAnalytics,
+  type LightingPeriod,
+  type AgendaReference,
+} from "./lighting-analytics.js";
 import { randomUUID } from "node:crypto";
 import { NotificationJournal, notificationReason } from "./notifications.js";
 import {
@@ -125,6 +131,9 @@ export class Store {
         CREATE INDEX IF NOT EXISTS requests_page ON assistance_requests(device_id,opened_at,request_id);
         CREATE INDEX IF NOT EXISTS commands_page ON commands(device_id,created_at,command_id);`);
     })();
+    this.db.exec(
+      `CREATE INDEX IF NOT EXISTS events_lighting_time ON events(device_id,${EVENT_TIME_SQL})`,
+    );
     this.notifications = new NotificationJournal(this.db, this.now);
     this.notifications.add({
       source: `backend:${randomUUID()}`,
@@ -873,6 +882,33 @@ export class Store {
             ).toString("base64url")
           : null,
     };
+  }
+  lightingAnalytics(id: string, period: LightingPeriod) {
+    const device = this.requireDevice(id),
+      state = device.state;
+    const runtime = state?.runtimeSettings;
+    const applied = this.db
+      .prepare(
+        "SELECT payload FROM device_configs WHERE device_id=? AND config_version=? AND status='APPLIED'",
+      )
+      .get(id, state?.appliedConfigVersion ?? 0) as any;
+    const confirmed = applied ? JSON.parse(applied.payload) : null;
+    const agenda: AgendaReference | null = runtime
+      ? {
+          startTime: runtime.startTime,
+          endTime: runtime.endTime,
+          timezoneOffsetHours: runtime.timezoneOffsetHours,
+          source: "telemetry",
+        }
+      : confirmed
+        ? {
+            startTime: confirmed.startTime,
+            endTime: confirmed.endTime,
+            timezoneOffsetHours: -3,
+            source: "confirmed",
+          }
+        : null;
+    return lightingAnalytics(this.db, id, period, this.now(), agenda);
   }
   snapshot(id = DEVICE) {
     const device = this.device(id);

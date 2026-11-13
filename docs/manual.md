@@ -28,7 +28,8 @@ O som é opcional: habilite por clique antes de abrir os pedidos. Evite ensaios 
 - **Sino de notificações:** abre a atividade de todos os dispositivos, com filtros, horários e **Ver detalhes** para ir à tela do destinatário. O contador representa as notificações não lidas neste navegador; abrir ou atualizar a central não zera o contador. Use **Atualizar** para trazer novidades à lista aberta, **Carregar mais** para consultar as anteriores e **Marcar todas como lidas** para zerar o contador e remover os destaques, com confirmação visível. O histórico cobre os últimos 30 dias. Todas as novas notificações também aparecem em toasts com o leito/dispositivo e acesso aos detalhes, incluindo movimento, luz e presença; rajadas são resumidas em até três avisos simultâneos. O som continua dedicado aos chamados.
 - **Estados nos cartões:** luz acesa tem lâmpada dourada iluminada; apagada tem lâmpada riscada. Movimento detectado pulsa discretamente. Chamado pendente destaca sino e borda dourada; reconhecido mostra confirmação. Relógio inválido usa triângulo de alerta. Ícones acompanham os textos; sem dados aparece “Sem informação”. Offline ou sem conexão, não há animação de atividade e os valores são a última informação recebida. A preferência por movimento reduzido mantém os sinais estáticos. Os botões ficam no rodapé, alinhados entre cartões da mesma linha, sem a mensagem adicional de última informação.
 - **Selecionar leito ou dispositivo:** fica na faixa **Dispositivo em acompanhamento**, dentro de Iluminação e movimento, Assistência e Administração, antes dos controles. Define o destinatário dessas telas; o ID selecionado aparece ao lado. O Dashboard tem visão global, sem seletor de leito.
-- **Iluminação:** configura modo, brilho, prazo e agenda do dispositivo selecionado. Troca rápida usa a última intenção enviada ou padrões se nenhuma existir; não publica os demais campos em edição.
+- **Iluminação:** um cartão reúne modo, brilho, prazo e agenda. Toda edição, inclusive Automático/Ligado/Desligado, fica como rascunho até **Aplicar configuração**. A lâmpada do slider é uma prévia local, distinta do estado real. O relógio abre o seletor próprio de hora/minuto, com **Definir horário** e **Cancelar**. **Ver detalhes** mostra parâmetros atuais, versão confirmada e última intenção/resultados. Rascunhos, detalhes e período dos gráficos são separados por leito.
+- **Gráficos da iluminação:** escolha 24 h, 7 dias ou 30 dias. Consulte movimentos por hora, movimentos/acionamentos ao longo do período e distribuição dentro/fora da agenda atual de referência. Use barras por mouse/toque, setas no teclado ou tabelas. A referência vem do dispositivo/versão confirmada, nunca da edição em curso; não representa todas as agendas antigas. Sem horário original, o recebimento é aproximado. Sem registros, não inferir ausência física de movimento. Os gráficos não estimam duração ou consumo.
 - **Assistência:** um chamado ativo por dispositivo; vários dispositivos podem ter chamados simultâneos. Reconhecer precede Encerrar. Som e lista global consideram os chamados de todos os dispositivos.
 - **Administração:** associa dispositivos encontrados, corrige nomes e consulta históricos por dispositivo ou globais. Não há ação de transferir/substituir/remover um vínculo.
 - **Históricos:** filtros por tipo/período nos eventos; Carregar mais acessa registros anteriores; Atualizar consulta volta aos recentes. O período usa recebimento no backend.
@@ -67,15 +68,15 @@ Registre teste, data, executor, condição inicial, resultado observado, evidên
 
 - **Preparar/agir:** no leito selecionado, enviar modos AUTO/ON/OFF, brilho e prazo válidos; conferir confirmação e estado.
 - **Esperado:** alterações só naquele dispositivo; agenda com horários iguais habilita 24 h.
-- **Exceção:** brilho 0/101, prazo 0/601, campos fracionários ou horários vazios devem ser bloqueados/recusados sem aplicação parcial.
+- **Exceção:** slider limita brilho a 1–100% e o seletor limita horários válidos. Prazo vazio, 0/601 ou fracionário deve impedir envio sem aplicação parcial.
 - **Restaurar:** enviar configuração inicial válida e aguardar confirmação.
 
-### I05 — troca rápida preserva rascunho
+### I05 — prévia e aplicação conjunta preservam rascunho
 
-- **Preparar/agir:** com brilho confirmado de 30%, editar para 61% sem enviar; clicar Ligado na troca rápida.
-- **Esperado:** modo muda usando os últimos parâmetros enviados; 61% permanece como edição não enviada. Enviar configuração publica o rascunho completo.
-- **Exceção:** cliques durante envio não geram requisições paralelas; erro não apaga edição nem confirma aplicação.
-- **Restaurar:** configuração inicial completa.
+- **Preparar/agir:** com brilho confirmado de 30%, editar para 61%, escolher Ligado e definir horários sem aplicar.
+- **Esperado:** lâmpada de prévia muda de intensidade, mas estado real e agenda de referência permanecem os anteriores. Nenhuma configuração é publicada até **Aplicar configuração**, que envia o conjunto.
+- **Exceção:** edições durante o envio continuam como rascunho após a resposta; cliques repetidos não criam envios paralelos. Erro não apaga edição nem confirma aplicação. Cancelar o seletor de horário preserva o valor anterior.
+- **Restaurar:** aplicar a configuração inicial completa e aguardar confirmação.
 
 ### I06 — configuração com dispositivo offline
 
@@ -181,6 +182,13 @@ Registre teste, data, executor, condição inicial, resultado observado, evidên
 - **Esperado:** mesma aparência noturna, opção selecionada identificada e opções longas disponíveis com rolagem. A lista cabe na tela, inclusive no celular. Alterar o modo no formulário só edita o rascunho até enviar.
 - **Exceção:** Escape fecha primeiro a lista, mantendo a central; Tab avança sem escolher outra opção. Sem dispositivos, o seletor informa espera e fica indisponível. Movimento reduzido desativa as animações do sino e das listas.
 - **Restaurar:** volte aos filtros originais, descarte rascunhos de teste e feche a central; confirme abertura e fechamento suaves.
+
+### I21 — gráficos, detalhes e troca de leito
+
+- **Preparar/agir:** abrir Iluminação e movimento, expandir **Ver detalhes**, escolher os três períodos e alternar os leitos com rascunhos diferentes.
+- **Esperado:** detalhes distinguem atual/confirmado/enviado; período, rascunho e expansão são preservados por leito. Cartões e gráficos têm transição ao ativar leito/período. Heartbeats não reiniciam animações. Barras têm valores por mouse, toque e teclado e tabelas de apoio.
+- **Exceção:** sem registros, mostrar ausência de eventos, sem simular dados; sem agenda, não classificar dentro/fora. Falha de consulta preserva a última consulta daquele período/leito; respostas atrasadas não podem sobrescrever a seleção atual. Offline, sinais param e histórico fica identificado como última consulta. Movimento reduzido desativa animações.
+- **Restaurar:** retornar às últimas 24 h, fechar detalhes e restaurar configurações dos leitos.
 
 ## Encerramento e pendências
 

@@ -11,17 +11,13 @@ import {
   type Overview,
 } from "./model";
 import { Sidebar, Icon, pages, readPage } from "./navigation";
-import {
-  DashboardView,
-  LightingView,
-  AssistanceView,
-  AdminView,
-  StatusBadge,
-} from "./views";
+import { DashboardView, AssistanceView, AdminView, StatusBadge } from "./views";
 import { ArchiveLists, useRecords } from "./records";
 import { FleetOverview, FleetAlerts, FleetAdmin, FleetApp } from "./fleet";
 import { NotificationBell } from "./notifications";
 import { Select } from "./Select";
+import { LightingView } from "./LightingView";
+import type { LightingPeriod } from "./lighting-model";
 import "./style.css";
 export function DeviceApp({
   deviceId,
@@ -86,6 +82,8 @@ export function DeviceApp({
     document.title = `${pages.find((p) => p.id === page)!.label} · NightCare`;
     window.scrollTo(0, 0);
   }, [page, active]);
+  const [lightingPeriod, setLightingPeriod] = useState<LightingPeriod>("24h");
+  const [lightingDetails, setLightingDetails] = useState(false);
   const [error, setError] = useState("");
   const [form, setForm] = useState<Settings>(defaults),
     [dirty, setDirty] = useState(false),
@@ -153,10 +151,6 @@ export function DeviceApp({
     !busy;
   const editRevision = useRef(0);
   const configFlight = useRef(false);
-  const desiredRef = useRef<Settings | null>(null);
-  useEffect(() => {
-    desiredRef.current = snapshot?.configs[0]?.payload ?? null;
-  }, [snapshot?.configs[0]?.config_version]);
   function change<K extends keyof Settings>(key: K, value: Settings[K]) {
     editRevision.current++;
     setForm((f) => ({ ...f, [key]: value }));
@@ -179,40 +173,9 @@ export function DeviceApp({
         timezone: form.timezone,
       };
       const result = await api(`/api/devices/${deviceId}/config`, payload);
-      desiredRef.current = payload;
       if (revision === editRevision.current) setDirty(false);
       setNotice(
         `Versão ${result.configVersion} enviada. Aguarde confirmação do ESP32.`,
-      );
-    } catch (e) {
-      setError((e as Error).message);
-    } finally {
-      configFlight.current = false;
-      setSaving(false);
-    }
-  }
-  async function quickMode(mode: Settings["mode"]) {
-    if (configFlight.current || !connected) return;
-    configFlight.current = true;
-    setSaving(true);
-    setError("");
-    // Use the latest persisted intent, never the unsent draft.
-    const latest = desiredRef.current ?? snapshot?.configs[0]?.payload;
-    const base = latest ?? defaults;
-    const payload: Settings = {
-      mode,
-      brightnessPct: base.brightnessPct,
-      offDelaySec: base.offDelaySec,
-      startTime: base.startTime,
-      endTime: base.endTime,
-      timezone: base.timezone,
-    };
-    try {
-      const result = await api(`/api/devices/${deviceId}/config`, payload);
-      desiredRef.current = payload;
-      setForm((f) => ({ ...f, mode }));
-      setNotice(
-        `Modo enviado na versão ${result.configVersion}. Aguarde confirmação do ESP32.`,
       );
     } catch (e) {
       setError((e as Error).message);
@@ -400,7 +363,11 @@ export function DeviceApp({
               saving={saving}
               change={change}
               save={save}
-              quickMode={quickMode}
+              active={active}
+              period={lightingPeriod}
+              onPeriodChange={setLightingPeriod}
+              detailsOpen={lightingDetails}
+              onDetailsChange={setLightingDetails}
               canConfigure={!!snapshot?.device.bed}
             />
           )}

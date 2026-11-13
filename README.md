@@ -158,7 +158,7 @@ A barra lateral pode ser expandida ou recolhida. No celular, o botão de menu ab
 | Tela | Uso |
 | --- | --- |
 | Dashboard | cartões de todos os leitos; ícones e sinais visuais de movimento, luz, relógio, presença e chamados simultâneos |
-| Iluminação e movimento | estado da luz e PIR; troca rápida de modo; edição de modo, brilho, agenda e prazo |
+| Iluminação e movimento | estado da luz/PIR; cartão único de ajustes com prévia de brilho, horários próprios, detalhes e três gráficos por leito |
 | Assistência | pedido ativo, acionamentos do botão, tempo desde abertura, reconhecer/encerrar e resultados das últimas ações |
 | Administração | descoberta/associação, correção de nomes, históricos por dispositivo ou globais e diagnósticos |
 
@@ -176,7 +176,15 @@ A presença exige estado novo: dados retidos não indicam online. Heartbeats e m
 
 Modo e brilho atuais vêm do estado do ESP32. O firmware atualizado também publica agenda, prazo e offset UTC efetivamente ativos em `runtimeSettings`, incluindo alterações pelo serial. O painel separa esses parâmetros da configuração remota confirmada e da última configuração enviada. Firmware anterior continua aceito: nesse caso o painel informa a ausência dessa telemetria. A versão confirmada é consultada diretamente no banco, mesmo fora das 30 configurações recentes. Offline, os dados são identificados como última informação recebida.
 
-Os botões **Automático / Ligado / Desligado** enviam uma configuração completa baseada nos últimos parâmetros enviados, alterando apenas o modo dessa intenção. Sem envio anterior, usam os padrões do firmware. As demais edições ainda não enviadas permanecem no formulário e não são publicadas por esses botões. A confirmação continua dependendo do ESP32.
+Em **Iluminação e movimento**, **Automático / Ligado / Desligado** agora alteram somente o rascunho. **Aplicar configuração** envia modo, brilho, prazo e agenda juntos; não existe mais troca imediata de modo nessa tela. O slider de 1–100% muda a intensidade de uma lâmpada de **prévia local**, sem alterar o indicador do dispositivo real antes da confirmação. O seletor de horários usa a interface do app em formato 24 h, com hora/minuto e **Definir horário** ou **Cancelar**. Horários iguais continuam significando agenda de 24 h.
+
+**Ver detalhes** expande parâmetros recebidos, configuração remota confirmada, última intenção e motivo informado. Rascunho, período dos gráficos e expansão dos detalhes são preservados separadamente por leito durante a navegação. Entradas dos cartões, lâmpada, movimento e gráficos têm animações discretas; heartbeats não as reiniciam e movimento reduzido as desativa.
+
+Os gráficos oferecem **24 h, 7 dias e 30 dias**: movimentos por hora do dia, comparação de movimentos com acionamentos da luz e distribuição dentro/fora da agenda. Os dois primeiros têm valores por toque/mouse/teclado e tabelas acessíveis; a distribuição expõe quantidades e percentuais em texto. A consulta é agregada no backend sobre todo o período, sem limitação à página de 100 eventos. Horários de ocorrência têm prioridade; registros sem horário original usam recebimento e são identificados como aproximados. UTC usa o offset efetivo da referência (ou UTC−3 sem referência).
+
+A classificação usa **a agenda atual como referência**, obtida dos parâmetros efetivos ou da versão remota confirmada; nunca usa uma edição nem uma intenção pendente. Não reconstrói alterações antigas pelo serial. Sem agenda conhecida, a classificação fica indisponível; sem registros, há estado vazio. Acionamentos não significam duração nem consumo energético, e ausência de registros não comprova ausência física de movimento. Gráficos mantêm a última consulta se houver falha ou desconexão, com aviso; alterações de período/leito descartam respostas atrasadas. Atualizações por eventos são agrupadas em até uma consulta a cada dois segundos, além de uma atualização por minuto da janela. Só o leito visível é consultado.
+
+Evoluções possíveis: mapa de calor por dia/horário, comparação entre leitos e duração da iluminação com identificação de lacunas.
 
 Administração permite **Carregar mais** em eventos, chamados, comandos e configurações, em páginas de 100 registros. Ao consultar páginas antigas, atualizações ao vivo preservam a consulta; **Atualizar consulta** retorna aos registros mais recentes. Eventos têm filtros por tipo/período e detalhes de identificação. Escolha Dispositivo selecionado ou Todos os dispositivos; todas as listas identificam o leito/deviceId. Chamados mostram abertura e acionamentos; comandos mostram resultado, motivo e validade; configurações mostram versões e parâmetros. Boot, sequência, tempo em execução, persistência e perdas aparecem nos diagnósticos. Esses valores refletem a última telemetria recebida, não estimativas do navegador.
 
@@ -245,6 +253,7 @@ curl -fsS -X POST http://localhost:3000/api/devices/nightcare-001/config \
 | `GET /api/devices`, `/api/beds` | dispositivos encontrados e leitos associados |
 | `POST /api/devices/:deviceId/assign` | `{ "name": "Leito 2" }`, HTTP 201 ao associar |
 | `PATCH /api/beds/:id` | `{ "name": "Leito B" }`, corrige nome; não aceita trocar deviceId |
+| `GET /api/devices/:deviceId/lighting-analytics?period=24h` | análise agregada do dispositivo; períodos `24h` (padrão), `7d` ou `30d` |
 | `GET /api/devices/:deviceId/status` | estado e listas recentes do dispositivo |
 | `GET /api/devices/:deviceId/events`, `/requests`, `/commands`, `/configs` | consultas isoladas; paginação e filtros de eventos |
 | `POST /api/devices/:deviceId/config`, `/commands` | intenções destinadas explicitamente ao dispositivo |
@@ -256,6 +265,8 @@ curl -fsS -X POST http://localhost:3000/api/devices/nightcare-001/config \
 | `POST /api/commands` | `commandId`, `requestId`, `action: ACK_HELP ou CLOSE_HELP` |
 | `GET /api/commands/:id` | resultado da intenção |
 | `GET /ws` com upgrade WebSocket | `{type:"snapshot",data:...}` inicial e ao mudar dados |
+
+`GET /api/devices/:deviceId/lighting-analytics` retorna `deviceId`, `period`, `from`/`to` UTC em milissegundos (início inclusivo/fim exclusivo), `timezoneOffsetHours`, `agendaReference`, `totals`, `approximateTimestampCount`, `hourlyMovements` (24 horas), `activity` (por hora ou dia) e `agendaDistribution` (ou `null` sem agenda conhecida). Cada bucket informa limites, início estável e se é parcial; primeiros/últimos buckets podem ser recortados pela janela. Contagens usam `MOTION_STARTED` e `LIGHT_ON` deduplicados. A agenda identifica origem `telemetry` ou `confirmed`; horários iguais abrangem 24 h, início inclusivo e fim exclusivo. A consulta usa índice de dispositivo/horário efetivo, sem alterar o contrato MQTT ou o firmware.
 
 `GET /api/notifications` aceita `limit` (1–100, padrão 30), `cursor`, `deviceId`, `category`, `readThroughId` (marcador local de leitura), `afterId` e `untilId` (faixa de IDs). Retorna `items`, `nextCursor`, `installationId`, `latestId` e `unreadCount` global, independente dos filtros. Categorias: `presence`, `lighting`, `motion`, `assistance`, `configuration`, `commands`, `administration`, `diagnostics`, `system`. Cursor está vinculado à instalação e aos filtros/faixa. Cada item contém ID sequencial, tipo/categoria/severidade, descrição, dispositivo, nome histórico do leito, referência da operação e horários de ocorrência/recebimento. `/api/status` e snapshots `/ws` acrescentam `notifications: {installationId, latestId}`; os demais campos permanecem compatíveis. Leitura não é gravada no servidor nem compartilhada entre navegadores.
 
