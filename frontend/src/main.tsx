@@ -294,11 +294,6 @@ export function DeviceApp({
               </span>
             </div>
           </div>
-          {page !== "dashboard" &&
-            page !== "iluminacao" &&
-            page !== "assistencia" &&
-            page !== "administracao" &&
-            deviceContext}
           <FleetAlerts
             overview={overview}
             connected={connected}
@@ -374,6 +369,7 @@ export function DeviceApp({
           )}
           <div hidden={page !== "historico"}>
             <HistoryView
+              deviceContext={deviceContext}
               deviceId={deviceId}
               active={active && page === "historico"}
               deviceNames={deviceNames}

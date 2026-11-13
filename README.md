@@ -161,7 +161,7 @@ A barra lateral pode ser expandida ou recolhida. No celular, o botão de menu ab
 | Iluminação e movimento | estado da luz/PIR; cartão único de ajustes com prévia de brilho, horários próprios, detalhes e três gráficos por leito |
 | Assistência | pedido ativo, acionamentos do botão, tempo desde abertura, reconhecer/encerrar e resultados das últimas ações |
 | Administração | header por dispositivo, registro de dois dispositivos por página, observabilidade em card de mesmo tamanho e detalhes em abas Configurações/Diagnóstico |
-| Histórico | dois cards paginados: Eventos/Chamados/Configurações em abas e Comandos; filtros e consulta global ou por dispositivo |
+| Histórico | header por dispositivo; cards com abrangência independente, abas Eventos/Chamados/Configurações e Todas/Reconhecer/Encerrar, filtros e paginação |
 
 Os cartões do Dashboard mostram cada estado com ícone, texto e destaque visual: lâmpada dourada com brilho quando acesa e riscada quando apagada, sinal pulsante durante movimento, sino e borda dourada para chamado pendente, confirmação para atendimento reconhecido e alerta para relógio inválido. Ao mudar um valor, há uma transição breve; heartbeats sem mudança não reiniciam essa transição. Sem dados, o cartão informa ausência de informação. Offline ou sem conexão do painel, os indicadores ficam neutros e sem animação de atividade, preservando somente a última informação recebida. Movimento reduzido desativa as animações e mantém ícones/textos/cores. Os botões ficam sempre no rodapé dos cartões; o selo Offline/Sem conexão e os indicadores neutros substituem a mensagem adicional nesses cartões.
 
@@ -189,7 +189,7 @@ A classificação usa **a agenda atual como referência**, obtida dos parâmetro
 
 Evoluções possíveis: mapa de calor por dia/horário, comparação entre leitos e duração da iluminação com identificação de lacunas.
 
-A página **Histórico** consulta eventos, chamados, comandos e configurações em páginas de 25 registros, com **Anterior**, **Próxima** e **Atualizar consulta**. Filtros e alcance global/dispositivo são independentes por coleção. IDs, parâmetros, horários, validade e motivos permanecem disponíveis nos detalhes. Configurações e diagnóstico do último estado recebido ficam na Administração.
+A página **Histórico** consulta eventos, chamados, comandos e configurações em páginas de 25 registros, com **Anterior**, **Próxima** e **Atualizar consulta**. Cada card tem sua própria abrangência (dispositivo do header ou todos); filtros de cada coleção permanecem independentes. IDs, parâmetros, horários, validade e motivos permanecem disponíveis nos detalhes. Configurações e diagnóstico do último estado recebido ficam na Administração.
 
 ## Circuito e controle local
 
@@ -372,3 +372,6 @@ A Administração coleta presença observada e mensagens MQTT válidas recebidas
 `GET /api/devices/:deviceId/observability?period=24h` retorna janela, início da coleta, tempos online/offline/sem observação, presença por minuto, mensagens por hora e último contato. A interface consulta somente o dispositivo ativo a cada cinco segundos e mantém o gráfico anterior em falhas, com aviso.
 
 Na página **Histórico**, use páginas de 25 registros, **Anterior**, **Próxima** e **Atualizar consulta**. As tabelas têm área limitada e rolagem própria. Páginas consultadas não se deslocam com heartbeats. Eventos filtram por tipo/recebimento; chamados por estado/abertura; configurações por resultado/criação; comandos por ação/resultado/criação. As APIs `/api/devices/:deviceId/{requests,configs,commands}` e equivalentes globais aceitam `from`, `to` e `status`; comandos aceitam também `action=ACK_HELP|CLOSE_HELP`. Cursores são vinculados à coleção, dispositivo e filtros. As rotas e o array legado de eventos permanecem disponíveis.
+
+
+O Histórico tem header com seletor abaixo do título, à esquerda. A abrangência de **Histórico de registros** vale para Eventos/Chamados/Configurações; a de **Histórico de comandos** é independente. As abas **Todas / Reconhecer / Encerrar** substituem o seletor de ação, mantendo resultado/período ao trocar de ação; **Limpar filtros** volta a Todas. Ambas as fileiras de abas aceitam setas/Home/End. As tabelas usam `ScrollArea`, com rolagem nativa, trilho grafite e indicador dourado, altura360px, cabeçalho fixo e suporte a teclado/roda/toque nos dois eixos. Nenhum filtro de um card modifica a página do outro; estados são preservados por perfil do dispositivo ao navegar.
