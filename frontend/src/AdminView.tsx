@@ -61,8 +61,7 @@ export function AdminView({
       <section className="card admin-information admin-enter">
         <div className="section-title">
           <div>
-            <p className="eyebrow">INFORMAÇÕES DETALHADAS</p>
-            <h2>Dispositivo e observabilidade</h2>
+            <h2 className="card-label">Informações detalhadas</h2>
           </div>
           <HelpTooltip label="Informações detalhadas">
             Os indicadores correspondem somente ao dispositivo selecionado no
@@ -86,8 +85,7 @@ export function AdminView({
       <section className="card admin-technical admin-enter">
         <div className="section-title">
           <div>
-            <p className="eyebrow">INFORMAÇÕES DO DISPOSITIVO</p>
-            <h2>Configurações e diagnóstico</h2>
+            <h2 className="card-label">Informações do dispositivo</h2>
           </div>
         </div>
         <div

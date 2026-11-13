@@ -3,6 +3,7 @@ import { api, date, names, type Overview } from "./model";
 import { Icon } from "./navigation";
 import { DeviceSignals } from "./DeviceSignals";
 import { NotificationProvider } from "./notifications";
+import { HelpTooltip } from "./HelpTooltip";
 export type FleetDeviceProps = {
   deviceId: string;
   active: boolean;
@@ -461,11 +462,13 @@ export function FleetAdmin({
   }, [currentPage]);
   return (
     <section className="card fleet-admin">
-      <h2>Dispositivos e leitos</h2>
-      <p className="hint">
-        Confirme onde cada dispositivo foi instalado. A associação é permanente
-        nesta versão; corrigir o nome não troca o dispositivo.
-      </p>
+      <div className="section-title">
+        <h2 className="card-label">Dispositivos e leitos</h2>
+        <HelpTooltip label="Dispositivos e leitos">
+          Confirme onde cada dispositivo foi instalado. A associação é
+          permanente nesta versão; corrigir o nome não troca o dispositivo.
+        </HelpTooltip>
+      </div>
       <div
         className="registration-grid"
         ref={list}

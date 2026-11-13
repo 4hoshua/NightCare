@@ -19,6 +19,10 @@ import { NotificationBell } from "./notifications";
 import { Select } from "./Select";
 import { LightingView } from "./LightingView";
 import type { LightingPeriod } from "./lighting-model";
+import {
+  useAssistanceAnalytics,
+  type AssistancePeriod,
+} from "./assistance-model";
 import "./style.css";
 export function DeviceApp({
   deviceId,
@@ -84,6 +88,15 @@ export function DeviceApp({
     window.scrollTo(0, 0);
   }, [page, active]);
   const [lightingPeriod, setLightingPeriod] = useState<LightingPeriod>("24h");
+  const [assistancePeriod, setAssistancePeriod] =
+    useState<AssistancePeriod>("24h");
+  const assistanceAnalytics = useAssistanceAnalytics(
+    snapshot,
+    assistancePeriod,
+    active && page === "assistencia",
+    connected,
+    overview?.notifications?.latestId,
+  );
   const [error, setError] = useState("");
   const [form, setForm] = useState<Settings>(defaults),
     [dirty, setDirty] = useState(false),
@@ -246,6 +259,20 @@ export function DeviceApp({
               <Icon name="menu" />
             </button>
             <span className="breadcrumb">
+              <svg
+                className="breadcrumb-mark"
+                viewBox="0 0 16 16"
+                fill="none"
+                aria-hidden="true"
+              >
+                <path
+                  d="m6 3 5 5-5 5"
+                  stroke="currentColor"
+                  strokeWidth="1.5"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                />
+              </svg>
               <strong>{currentPage.label}</strong>
             </span>
           </div>
@@ -348,6 +375,9 @@ export function DeviceApp({
           )}
           {page === "assistencia" && (
             <AssistanceView
+              analytics={assistanceAnalytics}
+              period={assistancePeriod}
+              onPeriodChange={setAssistancePeriod}
               deviceContext={deviceContext}
               active={active}
               snapshot={snapshot}
@@ -377,11 +407,6 @@ export function DeviceApp({
           </div>
           <footer>
             <span className="footer-brand">NightCare</span>
-            <span>
-              Apoio ao deslocamento noturno{" "}
-              <span className="footer-separator">·</span> Avisos remotos
-              dependem da conexão e do painel aberto.
-            </span>
           </footer>
         </main>
       </div>

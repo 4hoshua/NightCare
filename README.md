@@ -68,7 +68,7 @@ O script gera `.env.demo`, `Wokwi/mqtt_demo.h` para compilação padrão e um pa
 5. No monitor serial, acompanhe Wi-Fi e a mensagem MQTT conectado. No painel, aguarde o dispositivo ficar online.
 6. Clique no PIR e em **Simulate Motion**. Pressione o botão AJUDA para abrir um chamado.
 
-A rede simulada é `Wokwi-GUEST`, sem senha, e o NTP usa `pool.ntp.org`. Aguarde a sincronização antes de reconhecer/encerrar pelo painel. Para testar iluminação durante o dia, envie pelo painel agenda **00:00–00:00**, ou use o modo **Ligado**. Horários iguais significam funcionamento automático 24 h.
+A rede simulada é `Wokwi-GUEST`, sem senha, e o NTP usa `pool.ntp.org`. A sincronização inicia automaticamente no boot; reiniciar backend e simulação não exige comandos no serial. Aguarde presença online e relógio válido antes de reconhecer/encerrar pelo painel. Na demo, cada nova ação aguarda uma resposta NTP atualizada e é revalidada automaticamente, evitando recusas causadas pelo atraso do tempo simulado. Para testar iluminação durante o dia, envie pelo painel agenda **00:00–00:00**, ou use o modo **Ligado**. Horários iguais significam funcionamento automático 24 h.
 
 O ESP32 conecta a `broker.emqx.io:1883` pela internet; o backend conecta ao mesmo broker. **Não use `localhost`, `mosquitto` ou `host.wokwi.internal` como endereço MQTT no Wokwi deste roteiro.** O gateway público não acessa sua rede local. [Rede e gateway público do Wokwi](https://docs.wokwi.com/guides/esp32-wifi)
 
@@ -149,7 +149,7 @@ Ao enviar configuração, o painel mostra a versão desejada e a versão aplicad
 
 O botão abre um pedido `PENDING`. **Reconhecer** muda para `ACKNOWLEDGED`; **Encerrar** só é permitido depois e retorna a `NONE`. Chamados não expiram com a luz. Novos cliques reiteram o mesmo pedido. O painel mantém o aviso, mostra o tempo desde a primeira observação da abertura e oferece som ativado pelo usuário; exige aba aberta e conectada. Para registros anteriores à migração, a abertura usa o primeiro recebimento disponível, ou a última atualização quando não há histórico.
 
-Comandos exibem enviado, confirmado, recusado ou **não confirmado** após dez segundos sem ACK. São válidos por 60 s. O painel bloqueia ações incompatíveis e aguarda a confirmação; o backend e o firmware também validam pedido, relógio e transição. Um ACK MQTT de transporte não confirma atendimento.
+Comandos exibem enviado, confirmado, recusado ou **não confirmado** após dez segundos sem ACK. São válidos por 60 s. A sincronização automática pode demorar mais que dez segundos; a confirmação posterior atualiza o mesmo comando, sem novo clique. O firmware espera NTP por até 30 s simulados e não renova a validade: falha de rede ou simulação muito lenta/pausada ainda pode causar recusa por sincronização/prazo. O painel bloqueia ações incompatíveis e aguarda a confirmação; o backend e o firmware também validam pedido, relógio e transição. Um ACK MQTT de transporte não confirma atendimento.
 
 ## Navegação do painel
 
@@ -159,7 +159,7 @@ A barra lateral pode ser expandida ou recolhida. No celular, o botão de menu ab
 | --- | --- |
 | Dashboard | cartões de todos os leitos; ícones e sinais visuais de movimento, luz, relógio, presença e chamados simultâneos |
 | Iluminação e movimento | estado da luz/PIR; cartão único de ajustes com prévia de brilho, horários próprios, detalhes e três gráficos por leito |
-| Assistência | pedido ativo, acionamentos do botão, tempo desde abertura, reconhecer/encerrar e resultados das últimas ações |
+| Assistência | pedido ativo e tempo desde abertura; reconhecer/encerrar; histórico por período de chamados, acionamentos e resultados dos comandos |
 | Administração | header por dispositivo, registro de dois dispositivos por página, observabilidade em card de mesmo tamanho e detalhes em abas Configurações/Diagnóstico |
 | Histórico | header por dispositivo; cards com abrangência independente, abas Eventos/Chamados/Configurações e Todas/Reconhecer/Encerrar, filtros e paginação |
 
@@ -190,6 +190,10 @@ A classificação usa **a agenda atual como referência**, obtida dos parâmetro
 Evoluções possíveis: mapa de calor por dia/horário, comparação entre leitos e duração da iluminação com identificação de lacunas.
 
 A página **Histórico** consulta eventos, chamados, comandos e configurações em páginas de 25 registros, com **Anterior**, **Próxima** e **Atualizar consulta**. Cada card tem sua própria abrangência (dispositivo do header ou todos); filtros de cada coleção permanecem independentes. IDs, parâmetros, horários, validade e motivos permanecem disponíveis nos detalhes. Configurações e diagnóstico do último estado recebido ficam na Administração.
+
+Em **Assistência**, os indicadores históricos oferecem **24 horas, 7 dias, 30 dias e Agenda do leito**. A agenda usa a execução mais recente aplicada, com a mesma janela de Iluminação: em andamento até agora, ou a última execução concluída; cruzamento de dia e horários iguais de 24 horas são respeitados. Sem referência efetiva ou configuração confirmada correspondente, a opção fica indisponível. **Chamados ao longo do período** é um gráfico de pontos por hora em 24h/Agenda e por dia em 7/30d. Intervalo, quantidade, parcialidade e fuso aparecem em tooltip por mouse, teclado ou toque; não há legenda permanente de pico. Acionamentos/reiterações usam recebimento do evento; comandos usam envio e resultado mais recente. As agregações não têm limite das listas recentes nem estimam perdas. O contador permanece visível: zero sem chamado, indisponível sem dados e congelado offline. O acompanhamento mostra até **30 ações recentes**, com scroll dourado/grafite interno preenchendo o espaço restante sem crescer pelo conteúdo. Período é preservado por leito; falhas mantêm cache com aviso. O botão **Atualizar Gráficos** segue o padrão de Iluminação. API: `GET /api/devices/:deviceId/assistance-analytics?period=24h|7d|30d|agenda`, padrão `24h`; inclui `agendaReference`, `timezoneOffsetHours` e `callActivity` com `start`, `end`, `count`, `partial`, preservando totais anteriores de `requests`, `presses` e `commands`.
+
+O header principal usa chevron e nome da página com tipografia suave; o rodapé mostra somente NightCare à direita. Títulos de cards compartilham hierarquia compacta e alinhamento em pares entre Iluminação, Assistência e Administração. A orientação de associação em **Dispositivos e leitos** está no botão **?**. Em Administração e Histórico, títulos duplicados foram removidos; seletores, abas e paginação continuam disponíveis.
 
 ## Circuito e controle local
 
@@ -258,6 +262,7 @@ curl -fsS -X POST http://localhost:3000/api/devices/nightcare-001/config \
 | `PATCH /api/beds/:id` | `{ "name": "Leito B" }`, corrige nome; não aceita trocar deviceId |
 | `GET /api/devices/:deviceId/lighting-analytics?period=24h` | análise agregada do dispositivo; períodos `24h` (padrão), `7d` ou `30d` |
 | `GET /api/devices/:deviceId/status` | estado e listas recentes do dispositivo |
+| `GET /api/devices/:deviceId/assistance-analytics?period=24h` | histórico agregado de assistência; períodos `24h` (padrão), `7d`, `30d` ou `agenda`, sem limite das listas recentes |
 | `GET /api/devices/:deviceId/events`, `/requests`, `/commands`, `/configs` | consultas isoladas; paginação e filtros de eventos |
 | `POST /api/devices/:deviceId/config`, `/commands` | intenções destinadas explicitamente ao dispositivo |
 | `GET /api/devices/:deviceId/commands/:id` | resultado daquele comando naquele dispositivo |

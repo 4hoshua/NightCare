@@ -80,7 +80,27 @@ if(process.argv[2]==='serve'){
    assert.equal(lighting.agendaReference.startTime,'00:00');assert.equal(lighting.agendaReference.endTime,'00:00');
    assert.equal(lighting.agendaReference.source,'telemetry');assert.equal(lighting.timezoneOffsetHours,-3);
    assert.equal((await api(`/api/devices/${ids[0]}/lighting-analytics?period=invalid`)).status,400);
-   assert.ifError(error);console.log('PASS multi: discovery/association, separate motion/config, simultaneous calls, scoped ACK/CLOSE, global history and one-device Last Will; persistent notifications, lighting analytics and WebSocket metadata');
+   const assistanceA=(await api(`/api/devices/${ids[0]}/assistance-analytics?period=24h`)).data;
+   const assistanceB=(await api(`/api/devices/${ids[1]}/assistance-analytics?period=7d`)).data;
+   for(const a of [assistanceA,assistanceB]){
+     assert.equal(a.callActivity.reduce((sum,p)=>sum+p.count,0),a.requests.total);
+     assert.equal(a.callActivity[0].start,a.from);assert.equal(a.callActivity.at(-1).end,a.to);
+     assert.equal(a.timezoneOffsetHours,-3);
+   }
+   assert.ok(assistanceA.requests.closed>=1);assert.ok(assistanceA.presses.initial>=1);
+   assert.ok(assistanceA.commands.applied>=2);
+   assert.equal(assistanceB.requests.acknowledged,1);assert.equal(assistanceB.requests.closed,0);
+   assert.equal(assistanceB.presses.initial,1);assert.equal(assistanceB.commands.applied,1);
+   const agendaA=await api(`/api/devices/${ids[0]}/assistance-analytics?period=agenda`);
+   const agendaLighting=await api(`/api/devices/${ids[0]}/lighting-analytics?period=agenda`);
+   assert.equal(agendaA.status,200);assert.equal(agendaLighting.status,200);
+   assert.equal(agendaA.data.from,agendaLighting.data.from);
+   assert.ok(Math.abs(agendaA.data.to-agendaLighting.data.to)<1000);
+   assert.deepEqual(agendaA.data.agendaReference,agendaLighting.data.agendaReference);
+   assert.ok(agendaA.data.callActivity.every(p=>p.end-p.start<=3600000));
+   const missingAgenda=await api(`/api/devices/${ids[1]}/assistance-analytics?period=agenda`);
+   assert.equal(missingAgenda.status,400);assert.equal(missingAgenda.data.error,'AGENDA_UNAVAILABLE');
+   assert.ifError(error);console.log('PASS multi: discovery/association, separate motion/config, simultaneous calls, scoped ACK/CLOSE, global history and one-device Last Will; persistent notifications, lighting/assistance analytics and WebSocket metadata');
  }finally{
    ws?.terminate();for(const d of clients){clearInterval(d.heartbeat);if(d.client.connected){for(const suffix of ['state','availability','config/set'])await d.client.publishAsync(d.prefix+suffix,'',{qos:1,retain:true});await d.client.endAsync();}}
  }

@@ -361,8 +361,7 @@ export function HistoryView({
     <div className="history-page">
       <section className="card history-state">
         <div>
-          <p className="eyebrow">HISTÓRICO DO AMBIENTE</p>
-          <h2>Consulta de históricos</h2>
+          <h2 className="card-label">Histórico do ambiente</h2>
         </div>
         {deviceContext}
       </section>

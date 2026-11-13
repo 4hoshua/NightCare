@@ -1,4 +1,4 @@
-import type { HTMLAttributes } from "react";
+import type { ComponentProps } from "react";
 
 /** Native scrolling retains keyboard, wheel and touch support. */
 export function ScrollArea({
@@ -6,7 +6,7 @@ export function ScrollArea({
   tabIndex = 0,
   role = "region",
   ...props
-}: HTMLAttributes<HTMLDivElement>) {
+}: ComponentProps<"div">) {
   return (
     <div
       {...props}

@@ -1,10 +1,14 @@
+import { resolveAgendaReference } from "./analytics-window.js";
 import { Observability } from "./observability.js";
+import {
+  assistanceAnalytics,
+  type AssistancePeriod,
+} from "./assistance-analytics.js";
 import Database from "better-sqlite3";
 import {
   EVENT_TIME_SQL,
   lightingAnalytics,
   type LightingPeriod,
-  type AgendaReference,
 } from "./lighting-analytics.js";
 import { randomUUID } from "node:crypto";
 import { NotificationJournal, notificationReason } from "./notifications.js";
@@ -909,33 +913,23 @@ export class Store {
           : null,
     };
   }
+  assistanceAnalytics(id: string, period: AssistancePeriod) {
+    this.requireDevice(id);
+    return this.db.transaction(() =>
+      assistanceAnalytics(this.db, id, period, this.now()),
+    )();
+  }
   lightingAnalytics(id: string, period: LightingPeriod) {
-    const device = this.requireDevice(id),
-      state = device.state;
-    const runtime = state?.runtimeSettings;
-    const applied = this.db
-      .prepare(
-        "SELECT payload FROM device_configs WHERE device_id=? AND config_version=? AND status='APPLIED'",
-      )
-      .get(id, state?.appliedConfigVersion ?? 0) as any;
-    const confirmed = applied ? JSON.parse(applied.payload) : null;
-    const agenda: AgendaReference | null = runtime
-      ? {
-          startTime: runtime.startTime,
-          endTime: runtime.endTime,
-          timezoneOffsetHours: runtime.timezoneOffsetHours,
-          source: "telemetry",
-        }
-      : confirmed
-        ? {
-            startTime: confirmed.startTime,
-            endTime: confirmed.endTime,
-            timezoneOffsetHours: -3,
-            source: "confirmed",
-          }
-        : null;
-    if (period === "agenda" && !agenda) fail("AGENDA_UNAVAILABLE", 400);
-    return lightingAnalytics(this.db, id, period, this.now(), agenda);
+    this.requireDevice(id);
+    return this.db.transaction(() =>
+      lightingAnalytics(
+        this.db,
+        id,
+        period,
+        this.now(),
+        resolveAgendaReference(this.db, id),
+      ),
+    )();
   }
   snapshot(id = DEVICE) {
     const device = this.device(id);

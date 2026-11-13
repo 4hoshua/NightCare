@@ -102,6 +102,7 @@ export const eventNames: Record<string, string> = {
 export const date = (value: number | string | null) =>
   value === null ? "Sem registro" : new Date(value).toLocaleString("pt-BR");
 export const errorNames: Record<string, string> = {
+  AGENDA_UNAVAILABLE: "A agenda aplicada deste dispositivo não está disponível.",
   DEVICE_OFFLINE: "Dispositivo offline.",
   CLOCK_INVALID: "Aguarde NTP e retorne a hora real no ESP32.",
   REQUEST_MISMATCH: "O chamado mudou. Aguarde a atualização.",
