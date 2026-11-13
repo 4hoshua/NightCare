@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type ReactNode } from "react";
+import { useEffect, useId, useRef, useState, type ReactNode } from "react";
 import { api, date, names, type Overview } from "./model";
 export type FleetDeviceProps = {
   deviceId: string;
@@ -209,6 +209,38 @@ export function FleetAlerts({
     </section>
   );
 }
+function AnimatedBedCard({
+  visible,
+  children,
+}: {
+  visible: boolean;
+  children: ReactNode;
+}) {
+  const [present, setPresent] = useState(visible);
+  useEffect(() => {
+    if (visible) {
+      setPresent(true);
+      return;
+    }
+    if (matchMedia("(prefers-reduced-motion: reduce)").matches) {
+      setPresent(false);
+      return;
+    }
+    // Keep the card in the grid until its exit animation has finished.
+    const timeout = setTimeout(() => setPresent(false), 200);
+    return () => clearTimeout(timeout);
+  }, [visible]);
+  if (!visible && !present) return null;
+  return (
+    <section
+      className={`card bed-card ${visible ? "bed-card-enter" : "bed-card-exit"}`}
+      aria-hidden={!visible || undefined}
+      inert={!visible}
+    >
+      {children}
+    </section>
+  );
+}
 export function FleetOverview({
   overview,
   connected,
@@ -219,81 +251,120 @@ export function FleetOverview({
   onSelect: FleetDeviceProps["onSelect"];
 }) {
   const devices = overview?.devices ?? [];
+  const [search, setSearch] = useState("");
+  const searchId = useId();
+  const normalize = (text: string) => text
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLocaleLowerCase("pt-BR");
+  const beds = devices.filter((d) => d.bed);
+  const query = normalize(search.trim());
+  const filtered = beds.filter((d) =>
+    normalize(`${d.bed!.name} ${d.deviceId}`).includes(query),
+  );
   return (
     <>
-      <div className="bed-grid">
-        {devices
-          .filter((d) => d.bed)
-          .map((d) => (
-            <section className="card bed-card" key={d.deviceId}>
-              <div className="section-title">
-                <h2>{d.bed!.name}</h2>
-                <span
-                  className={`pill ${connected && d.online ? "success" : "waiting"}`}
-                >
-                  {connected && d.online ? "Online" : "Offline"}
-                </span>
-              </div>
-              <p className="mono">{d.deviceId}</p>
-              <dl className="detail-list">
-                <div>
-                  <dt>Movimento</dt>
-                  <dd>
-                    {d.state
-                      ? d.state.motion
-                        ? "Detectado"
-                        : "Sem movimento"
-                      : "Sem informação"}
-                  </dd>
-                </div>
-                <div>
-                  <dt>Luz</dt>
-                  <dd>
-                    {d.state
-                      ? d.state.lightOn
-                        ? `Acesa · ${d.state.brightnessPct}%`
-                        : "Apagada"
-                      : "Sem informação"}
-                  </dd>
-                </div>
-                <div>
-                  <dt>Assistência</dt>
-                  <dd>
-                    {d.state
-                      ? names[d.state.assistanceStatus]
-                      : "Sem informação"}
-                  </dd>
-                </div>
-                <div>
-                  <dt>Relógio</dt>
-                  <dd>
-                    {d.state
-                      ? d.state.clockValid
-                        ? "Sincronizado"
-                        : "Inválido ou em teste"
-                      : "Sem informação"}
-                  </dd>
-                </div>
-              </dl>
-              {(!connected || !d.online) && (
-                <p className="hint">
-                  Última informação recebida; sem atualização ao vivo.
-                </p>
-              )}
-              <div className="actions">
-                <button onClick={() => onSelect(d.deviceId, "iluminacao")}>
-                  Abrir iluminação
-                </button>
-                <button
-                  className="secondary"
-                  onClick={() => onSelect(d.deviceId, "assistencia")}
-                >
-                  Assistência
-                </button>
-              </div>
-            </section>
-          ))}
+      <div className="fleet-search">
+        <label htmlFor={searchId}>
+          Buscar leito ou dispositivo
+          <input
+            id={searchId}
+            type="search"
+            placeholder="Digite o nome do leito ou o ID do dispositivo"
+            value={search}
+            onChange={(event) => setSearch(event.target.value)}
+            aria-controls={`${searchId}-results`}
+          />
+        </label>
+        {search && (
+          <button className="secondary" onClick={() => setSearch("")}>
+            Limpar busca
+          </button>
+        )}
+        <span className="hint" role="status">
+          {filtered.length} de {beds.length} leitos
+        </span>
       </div>
+      <div className="bed-grid" id={`${searchId}-results`}>
+        {beds.map((d) => (
+          <AnimatedBedCard
+            key={d.deviceId}
+            visible={filtered.some((match) => match.deviceId === d.deviceId)}
+          >
+            <div className="section-title">
+              <h2>{d.bed!.name}</h2>
+              <span
+                className={`pill ${connected && d.online ? "success" : "waiting"}`}
+              >
+                {connected && d.online ? "Online" : "Offline"}
+              </span>
+            </div>
+            <p className="mono">{d.deviceId}</p>
+            <dl className="detail-list">
+              <div>
+                <dt>Movimento</dt>
+                <dd>
+                  {d.state
+                    ? d.state.motion
+                      ? "Detectado"
+                      : "Sem movimento"
+                    : "Sem informação"}
+                </dd>
+              </div>
+              <div>
+                <dt>Luz</dt>
+                <dd>
+                  {d.state
+                    ? d.state.lightOn
+                      ? `Acesa · ${d.state.brightnessPct}%`
+                      : "Apagada"
+                    : "Sem informação"}
+                </dd>
+              </div>
+              <div>
+                <dt>Assistência</dt>
+                <dd>
+                  {d.state
+                    ? names[d.state.assistanceStatus]
+                    : "Sem informação"}
+                </dd>
+              </div>
+              <div>
+                <dt>Relógio</dt>
+                <dd>
+                  {d.state
+                    ? d.state.clockValid
+                      ? "Sincronizado"
+                      : "Inválido ou em teste"
+                    : "Sem informação"}
+                </dd>
+              </div>
+            </dl>
+            {(!connected || !d.online) && (
+              <p className="hint">
+                Última informação recebida; sem atualização ao vivo.
+              </p>
+            )}
+            <div className="actions">
+              <button onClick={() => onSelect(d.deviceId, "iluminacao")}>
+                Abrir iluminação
+              </button>
+              <button
+                className="secondary"
+                onClick={() => onSelect(d.deviceId, "assistencia")}
+              >
+                Assistência
+              </button>
+            </div>
+          </AnimatedBedCard>
+        ))}
+      </div>
+      {!!beds.length && !filtered.length && (
+        <section className="card">
+          <h2>Nenhum leito encontrado</h2>
+          <p>Tente outro nome ou ID de dispositivo, ou limpe a busca para exibir todos os leitos.</p>
+        </section>
+      )}
       {!devices.some((d) => d.bed) && (
         <section className="card">
           <h2>Nenhum leito associado</h2>

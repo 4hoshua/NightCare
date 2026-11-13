@@ -24,8 +24,8 @@ O som é opcional: habilite por clique antes de abrir os pedidos. Evite ensaios 
 
 ## Regras de operação
 
-- **Dashboard:** mostra todos os leitos associados. Dispositivos sem leito aparecem para associação e seus chamados conhecidos continuam visíveis.
-- **Selecionar leito ou dispositivo:** define o destinatário das telas de iluminação, assistência e diagnóstico. A identificação selecionada aparece antes dos controles.
+- **Dashboard:** mostra todos os leitos associados. Use **Buscar leito ou dispositivo** para filtrar os cartões por nome ou ID, sem diferenciar maiúsculas ou acentos; **Limpar busca** volta a exibir todos. A busca acontece no navegador. Dispositivos sem leito aparecem para associação e seus chamados conhecidos continuam visíveis, mesmo durante a busca.
+- **Selecionar leito ou dispositivo:** fica na faixa **Dispositivo em acompanhamento**, dentro de Iluminação e movimento, Assistência e Administração, antes dos controles. Define o destinatário dessas telas; o ID selecionado aparece ao lado. O Dashboard tem visão global, sem seletor de leito.
 - **Iluminação:** configura modo, brilho, prazo e agenda do dispositivo selecionado. Troca rápida usa a última intenção enviada ou padrões se nenhuma existir; não publica os demais campos em edição.
 - **Assistência:** um chamado ativo por dispositivo; vários dispositivos podem ter chamados simultâneos. Reconhecer precede Encerrar. Som e lista global consideram os chamados de todos os dispositivos.
 - **Administração:** associa dispositivos encontrados, corrige nomes e consulta históricos por dispositivo ou globais. Não há ação de transferir/substituir/remover um vínculo.

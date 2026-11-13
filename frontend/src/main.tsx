@@ -275,24 +275,6 @@ export function DeviceApp({
               <Icon name="menu" />
             </button>
             <span className="breadcrumb">
-              <label className="bed-picker">
-                Leito
-                <select
-                  aria-label="Selecionar leito ou dispositivo"
-                  value={deviceId}
-                  onChange={(e) => onSelect(e.target.value)}
-                >
-                  {!overview?.devices.length && (
-                    <option value="">Aguardando dispositivos</option>
-                  )}
-                  {overview?.devices.map((d) => (
-                    <option key={d.deviceId} value={d.deviceId}>
-                      {d.bed?.name ?? `Sem leito · ${d.deviceId}`}
-                    </option>
-                  ))}
-                </select>
-              </label>
-              <span>/</span>
               <strong>{currentPage.label}</strong>
             </span>
           </div>
@@ -336,19 +318,47 @@ export function DeviceApp({
               <p>{currentPage.description}</p>
             </div>
             <div className="environment-status">
-              <StatusBadge online={online}>
-                {online ? "Ambiente conectado" : "Aguardando conexão"}
+              <StatusBadge online={page === "dashboard" ? connected : online}>
+                {page === "dashboard"
+                  ? connected
+                    ? "Painel conectado"
+                    : "Aguardando conexão"
+                  : online
+                    ? "Ambiente conectado"
+                    : "Aguardando conexão"}
               </StatusBadge>
               <span>
-                Última comunicação: {date(snapshot?.device.lastSeen ?? null)}
+                {page === "dashboard"
+                  ? `${connected ? overview?.devices.filter((d) => d.online).length ?? 0 : 0} de ${overview?.devices.length ?? 0} dispositivos online`
+                  : `Última comunicação: ${date(snapshot?.device.lastSeen ?? null)}`}
               </span>
             </div>
           </div>
-          <p className="selected-bed">
-            Selecionado:{" "}
-            <strong>{deviceNames[deviceId] ?? "Nenhum dispositivo"}</strong>{" "}
-            {deviceId && <span className="mono">· {deviceId}</span>}
-          </p>
+          {page !== "dashboard" && (
+            <section
+              className="device-context"
+              aria-label="Dispositivo em acompanhamento"
+            >
+              <label className="bed-picker">
+                Dispositivo em acompanhamento
+                <select
+                  aria-label="Selecionar leito ou dispositivo"
+                  value={deviceId}
+                  onChange={(e) => onSelect(e.target.value)}
+                >
+                  {!overview?.devices.length && (
+                    <option value="">Aguardando dispositivos</option>
+                  )}
+                  {overview?.devices.map((d) => (
+                    <option key={d.deviceId} value={d.deviceId}>
+                      {d.bed?.name ?? `Sem leito · ${d.deviceId}`}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <span className="mono">{deviceId || "Nenhum dispositivo"}</span>
+            </section>
+          )}
           <FleetAlerts
             overview={overview}
             connected={connected}

@@ -100,7 +100,7 @@ bash scripts/demo.sh --prepare-only --devices nightcare-001,nightcare-002
 2. Na primeira, copie os quatro arquivos de `Wokwi/demo/nightcare-001/`; na segunda, os de `Wokwi/demo/nightcare-002/`. O arquivo `mqtt_demo.h` é diferente em cada pacote.
 3. Inicie ambas e mantenha as duas janelas ativas/visíveis quando possível. Cada uma conecta ao broker público, com ID, client ID e tópicos próprios; não é necessário gateway privado nem comunicação direta entre simuladores.
 4. Em **Administração → Dispositivos e leitos**, confira os IDs encontrados, informe **Leito 1** e **Leito 2** e confirme as associações. Aguarde estado novo: uma fotografia retida não habilita associação.
-5. No Dashboard, observe todos os cartões. Abra iluminação/assistência de um leito ou use **Selecionar leito ou dispositivo**. Movimento, parâmetros, chamados, comandos, relógio e presença são independentes.
+5. No Dashboard, observe todos os cartões ou use **Buscar leito ou dispositivo** para filtrar por nome/ID localmente. Abra iluminação/assistência pelo cartão; nas telas de operação, troque o leito em **Dispositivo em acompanhamento**. Movimento, parâmetros, chamados, comandos, relógio e presença são independentes.
 
 O backend descobre mensagens válidas **dentro do namespace da instalação**; não procura equipamentos pela rede local nem em todos os tópicos do broker. O anúncio revela a identidade, mas o operador confirma onde o dispositivo foi instalado. O firmware não conhece o nome do leito.
 
