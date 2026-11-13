@@ -1,6 +1,11 @@
 import { useEffect, useRef } from "react";
 
-export type Page = "dashboard" | "iluminacao" | "assistencia" | "administracao";
+export type Page =
+  | "dashboard"
+  | "iluminacao"
+  | "assistencia"
+  | "administracao"
+  | "historico";
 export const pages: {
   id: Page;
   label: string;
@@ -36,8 +41,14 @@ export const pages: {
     label: "Administração",
     icon: "settings",
     title: "O ambiente, em detalhe.",
-    description:
-      "Consulte as configurações e acompanhe o histórico de atividades.",
+    description: "Gerencie os dispositivos e acompanhe sua comunicação.",
+  },
+  {
+    id: "historico",
+    label: "Histórico",
+    icon: "clock",
+    title: "Cada atividade, em seu registro.",
+    description: "Consulte eventos, chamados, configurações e comandos.",
   },
 ];
 export function readPage(): Page {

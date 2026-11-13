@@ -1,3 +1,4 @@
+import { Observability } from "./observability.js";
 import Database from "better-sqlite3";
 import {
   EVENT_TIME_SQL,
@@ -40,6 +41,7 @@ export class Store {
   publish?: Publisher;
   readonly rootPrefix: string;
   readonly notifications: NotificationJournal;
+  readonly observability: Observability;
   private presence = new Map<string, boolean>();
   private brokerState: boolean | undefined;
 
@@ -134,6 +136,7 @@ export class Store {
     this.db.exec(
       `CREATE INDEX IF NOT EXISTS events_lighting_time ON events(device_id,${EVENT_TIME_SQL})`,
     );
+    this.observability = new Observability(this.db, this.now);
     this.notifications = new NotificationJournal(this.db, this.now);
     this.notifications.add({
       source: `backend:${randomUUID()}`,
@@ -148,6 +151,7 @@ export class Store {
   }
   brokerChanged(connected: boolean) {
     if (this.brokerState === connected) return;
+    this.observability.broker(connected);
     this.brokerState = connected;
     this.notifications.add({
       source: `broker:${randomUUID()}`,
@@ -327,6 +331,7 @@ export class Store {
     const input = schema.parse(JSON.parse(raw.toString()));
     if (input.deviceId !== id) throw new Error("device/topic mismatch");
     const now = this.now();
+    this.observability.pulse();
     this.db.transaction(() => {
       // An unsolicited ACK is not a device announcement.
       if (suffix !== "acks") {
@@ -417,7 +422,10 @@ export class Store {
         }
       } else if (suffix === "state") {
         const old = this.device(id).state;
-        if (old?.bootId === p.bootId && p.sequence <= old.sequence) return;
+        if (old?.bootId === p.bootId && p.sequence <= old.sequence) {
+          this.observability.message(id, suffix, p, retained, false);
+          return;
+        }
         if (!retained) {
           const saved = this.db
             .prepare(
@@ -561,6 +569,7 @@ export class Store {
             this.configResult(id, p.configVersion, p.status, p.reason);
         }
       }
+      this.observability.message(id, suffix, p, retained);
       this.reconcilePresence(id);
     })();
   }
@@ -693,6 +702,7 @@ export class Store {
     });
   }
   tick() {
+    this.observability.pulse();
     this.db.transaction(() => {
       const timedOut = this.db
         .prepare(
@@ -776,6 +786,8 @@ export class Store {
       type?: string;
       from?: string;
       to?: string;
+      status?: string;
+      action?: string;
     },
     deviceId: string | null = DEVICE,
   ) {
@@ -791,6 +803,8 @@ export class Store {
       query.type ?? null,
       query.from ?? null,
       query.to ?? null,
+      query.status ?? null,
+      query.action ?? null,
     ]);
     let cursor:
       | {
@@ -825,19 +839,31 @@ export class Store {
       clauses.push("device_id=?");
       values.push(deviceId);
     }
-    if (kind === "events") {
-      if (query.type) {
-        clauses.push("type=?");
-        values.push(query.type);
-      }
-      if (query.from) {
-        clauses.push("received_at>=?");
-        values.push(Date.parse(query.from));
-      }
-      if (query.to) {
-        clauses.push("received_at<=?");
-        values.push(Date.parse(query.to));
-      }
+    if (kind === "events" && query.type) {
+      clauses.push("type=?");
+      values.push(query.type);
+    }
+    const timeColumn =
+      kind === "events"
+        ? "received_at"
+        : kind === "requests"
+          ? "opened_at"
+          : "created_at";
+    if (query.from) {
+      clauses.push(`${timeColumn}>=?`);
+      values.push(Date.parse(query.from));
+    }
+    if (query.to) {
+      clauses.push(`${timeColumn}<=?`);
+      values.push(Date.parse(query.to));
+    }
+    if (kind !== "events" && query.status) {
+      clauses.push("status=?");
+      values.push(query.status);
+    }
+    if (kind === "commands" && query.action) {
+      clauses.push("action=?");
+      values.push(query.action);
     }
     if (cursor) {
       clauses.push(
@@ -968,6 +994,7 @@ export class Store {
     };
   }
   close() {
+    this.observability.pulse();
     this.db.close();
   }
 }

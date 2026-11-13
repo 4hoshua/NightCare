@@ -31,8 +31,8 @@ O som é opcional: habilite por clique antes de abrir os pedidos. Evite ensaios 
 - **Iluminação:** um cartão reúne modo, brilho, prazo e agenda. Toda edição, inclusive Automático/Ligado/Desligado, fica como rascunho até **Aplicar configuração**. A lâmpada do slider é uma prévia local, distinta do estado real. O relógio abre o seletor próprio de hora/minuto, com **Definir horário** e **Cancelar**. As explicações ficam nos botões **?**, por hover, teclado ou toque. Detalhes de configuração ficam somente na Administração. Rascunhos e período dos gráficos são separados por leito.
 - **Gráficos da iluminação:** escolha 24 h, 7 dias, 30 dias ou Agenda do leito. Consulte movimentos por hora, movimentos/acionamentos ao longo do período e distribuição dentro/fora da agenda atual de referência. Use hover ou toque nas barras, ou navegue entre elas com as setas no teclado. A referência vem do dispositivo/versão confirmada, nunca da edição em curso; não representa todas as agendas antigas. Sem horário original, o recebimento é aproximado. Sem registros, não inferir ausência física de movimento. Os gráficos não estimam duração ou consumo.
 - **Assistência:** o cabeçalho reúne seletor de leito e sinais de assistência/relógio. Pedido e acompanhamento ficam juntos à esquerda; à direita, três indicadores do chamado atual mostram tempo desde a abertura, acionamentos (inicial/reiterações) e distribuição dos resultados dos comandos. A rosca considera somente comandos daquele chamado na amostra de até 30 comandos recentes do leito; não representa todo o histórico. Sem chamado ou data, há indicação explícita. Offline, o tempo fica na última comunicação. Explicações ficam nos botões **?**, por hover, foco ou toque. Os cards têm dimensões iguais no desktop e empilham em telas menores. Reconhecer precede Encerrar; som e lista global consideram todos os dispositivos.
-- **Administração:** associa dispositivos encontrados, corrige nomes e consulta históricos por dispositivo ou globais. Não há ação de transferir/substituir/remover um vínculo.
-- **Históricos:** filtros por tipo/período nos eventos; Carregar mais acessa registros anteriores; Atualizar consulta volta aos recentes. O período usa recebimento no backend.
+- **Administração:** reúne header por dispositivo, registro de toda a instalação e informações detalhadas do dispositivo selecionado. Associa dispositivos encontrados e corrige nomes; não há transferência/substituição/remoção de vínculo. Configurações e diagnóstico ficam em grupos expansíveis; os dois gráficos mostram presença e mensagens recebidas nas últimas 24 horas.
+- **Histórico:** página própria na navbar. Dois cards: registros em abas Eventos/Chamados/Configurações e comandos. Filtros independentes por período, tipo, resultado e ação conforme a coleção; consulta global ou por dispositivo. Anterior/Próxima navegam páginas de 25 registros; Atualizar consulta volta à primeira. As tabelas têm rolagem interna. Datas usam recebimento nos eventos, abertura nos chamados e criação nos comandos/configurações.
 - **Edições:** trocar de tela ou dispositivo preserva rascunhos e filtros na mesma página aberta. Recarregar o navegador pode descartá-los; a seleção do dispositivo fica no endereço.
 - **Presença:** painel, broker e dispositivo têm conexões distintas. Offline, valores conhecidos são última informação recebida; um dispositivo offline não altera os demais.
 - **Confirmação:** configuração desejada, configuração remota confirmada e parâmetros atuais são informações distintas. Sem telemetria dos parâmetros atuais, informar ausência, sem inventar valores.
@@ -115,14 +115,14 @@ Registre teste, data, executor, condição inicial, resultado observado, evidên
 
 ### I11 — histórico de eventos e filtros
 
-- **Preparar/agir:** produzir movimento e ciclo de assistência; filtrar por tipo e período em Administração.
+- **Preparar/agir:** produzir movimento e ciclo de assistência; filtrar por tipo e período na página Histórico.
 - **Esperado:** consulta do dispositivo selecionado, com leito/ID, recebimento, ocorrência e detalhes de evento. Todos os dispositivos amplia explicitamente a consulta.
 - **Exceção:** período invertido mostra erro; período vazio mostra ausência; horário do ESP32 ausente não é inventado. Trocar filtro descarta resposta anterior.
 - **Restaurar:** limpar filtros e atualizar consulta.
 
 ### I12 — demais históricos e paginação
 
-- **Preparar/agir:** conferir chamados, comandos e configurações, primeiro por dispositivo e depois globalmente; usar Carregar mais com massa preparada no ambiente isolado.
+- **Preparar/agir:** conferir chamados, comandos e configurações, primeiro por dispositivo e depois globalmente; usar Anterior/Próxima com massa preparada no ambiente isolado.
 - **Esperado:** IDs, abertura, contagem, parâmetros, validade, resultado e motivos corretos; IDs locais iguais de dispositivos distintos não se confundem.
 - **Exceção:** novas atualizações não removem páginas antigas; Atualizar consulta volta aos recentes. Falha de consulta aparece como erro, sem fingir resultado completo.
 - **Restaurar:** retornar ao dispositivo selecionado e atualizar consulta.
@@ -136,7 +136,7 @@ Registre teste, data, executor, condição inicial, resultado observado, evidên
 
 ### I14 — navegação, celular e teclado
 
-- **Preparar/agir:** abrir as quatro telas em 390/768/1024/1440 px; recolher menu, usar voltar/avançar, Tab, Shift+Tab, Escape e pular conteúdo.
+- **Preparar/agir:** abrir as cinco telas em 390/768/1024/1440 px; recolher menu, usar voltar/avançar, Tab, Shift+Tab, Escape e pular conteúdo.
 - **Esperado:** menu móvel contém foco e retorna ao gatilho; conteúdo de outros perfis não entra no foco; tabelas rolam dentro do cartão.
 - **Exceção:** hash desconhecido retorna ao Dashboard; `/dashboard` e `/dashboard/` redirecionam para a aplicação única.
 - **Restaurar:** voltar ao Dashboard e fechar menu móvel.
@@ -205,3 +205,18 @@ O período **Agenda do leito** usa a execução mais recente da agenda aplicada:
 - **Esperado:** cabeçalho com seletor e sinais; pedido/acompanhamento à esquerda e KPIs à direita, com larguras/alturas iguais a partir de 1440 px. Contagem e barra mudam apenas no chamado correspondente; rosca filtra pelo ID atual. Transições não reiniciam em heartbeats sem alteração. Tempo não representa prazo ou tempo até reconhecimento.
 - **Exceção:** sem chamado/dados há estado vazio; sem data de abertura, tempo desconhecido; offline conserva última informação e desabilita ações. Relógio inválido e comando pendente mantêm avisos operacionais. Tooltip da rosca explica a amostra limitada. Validar ajuda por teclado/toque/Escape e preferência de movimento reduzido; telas menores empilham sem overflow.
 - **Restaurar:** encerrar os chamados fictícios e voltar ao leito inicial.
+
+
+### I23 — Administração e observabilidade
+
+- **Preparar/agir:** selecionar um dispositivo com estado novo. Observar presença e comunicações nas últimas 24 horas; alternar leitos, abrir configurações e diagnóstico e consultar as ajudas **?**.
+- **Esperado:** três cards principais; header com seletor e sinais, registro de todos os dispositivos e detalhes somente do selecionado. Cada barra de presença distribui uma hora entre online/offline/sem observação; barras de comunicação contam recebimentos válidos, incluindo reentregas QoS. Valores por hover, toque e foco/setas/Escape. Janela até o último minuto completo; coleta iniciada agora não traz dados anteriores.
+- **Exceção:** pausas do backend/broker não viram offline. Retidos não confirmam presença nem contam como comunicação. Falha de API preserva o gráfico anterior e oferece tentar novamente. Preferência de movimento reduzido desativa transições. Não interpretar presença como garantia de funcionamento físico.
+- **Restaurar:** retornar ao leito inicial e fechar detalhes; executar falhas somente em ambiente isolado.
+
+### I24 — Histórico separado, limitado e filtrado
+
+- **Preparar/agir:** abrir Histórico, consultar abas e comandos, filtrar por tipo/estado/ação/período e alternar alcance dispositivo/global. Navegar até a segunda página, mudar de tela e voltar.
+- **Esperado:** até 25 linhas por card/página, tabelas com rolagem própria e navegação acessível; abas, filtros e página ficam preservados entre telas. Novas atividades não deslocam a leitura. Trocar filtro reinicia na primeira página. Configurações/chamados preservam todos os detalhes antes consultados na Administração.
+- **Exceção:** intervalo invertido mostra erro; filtros sem resultados mostram vazio. Falha de consulta não publica sucesso nem altera outro card. Checar teclado e layouts estreitos.
+- **Restaurar:** limpar filtros, atualizar consultas e retornar ao dispositivo selecionado.

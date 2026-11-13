@@ -142,6 +142,14 @@ export async function buildApp(
       .parse(req.query);
     return store.lightingAnalytics(id, query.period);
   });
+  app.get("/api/devices/:deviceId/observability", async (req) => {
+    const id = deviceParams.parse(req.params).deviceId;
+    z.object({ period: z.literal("24h").default("24h") })
+      .strict()
+      .parse(req.query);
+    store.requireDevice(id);
+    return store.observability.read(id);
+  });
   app.get("/api/devices/:deviceId/status", async (req) => {
     const id = deviceParams.parse(req.params).deviceId;
     store.requireDevice(id);
@@ -178,7 +186,25 @@ export async function buildApp(
     });
     for (const kind of ["requests", "commands", "configs"] as const)
       app.get(prefix + "/" + kind, async (req) => {
-        const q = pageQuery.strict().parse(req.query);
+        const q = pageQuery
+          .extend({
+            from: z.iso.datetime().optional(),
+            to: z.iso.datetime().optional(),
+            status: (kind === "requests"
+              ? z.enum(["PENDING", "ACKNOWLEDGED", "CLOSED"])
+              : kind === "configs"
+                ? z.enum(["PENDING", "APPLIED", "REJECTED"])
+                : z.enum(["PENDING", "APPLIED", "REJECTED", "UNCONFIRMED"])
+            ).optional(),
+            action:
+              kind === "commands"
+                ? z.enum(["ACK_HELP", "CLOSE_HELP"]).optional()
+                : z.never().optional(),
+          })
+          .strict()
+          .parse(req.query);
+        if (q.from && q.to && Date.parse(q.from) > Date.parse(q.to))
+          throw Object.assign(new Error("INVALID_PERIOD"), { statusCode: 400 });
         if (q.scope && prefix !== "/api")
           throw Object.assign(new Error("INVALID_SCOPE"), { statusCode: 400 });
         return store.page(kind, q, q.scope ? null : target(req.params));

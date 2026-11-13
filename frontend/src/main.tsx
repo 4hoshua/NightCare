@@ -8,13 +8,13 @@ import {
   date,
   type Settings,
   type Snapshot,
-  type EventRow,
   type Overview,
 } from "./model";
 import { Sidebar, Icon, pages, readPage } from "./navigation";
-import { DashboardView, AdminView, StatusBadge } from "./views";
-import { ArchiveLists, useRecords } from "./records";
-import { FleetOverview, FleetAlerts, FleetAdmin, FleetApp } from "./fleet";
+import { DashboardView, StatusBadge } from "./views";
+import { AdminView } from "./AdminView";
+import { HistoryView } from "./HistoryView";
+import { FleetOverview, FleetAlerts, FleetApp } from "./fleet";
 import { NotificationBell } from "./notifications";
 import { Select } from "./Select";
 import { LightingView } from "./LightingView";
@@ -90,30 +90,6 @@ export function DeviceApp({
     [saving, setSaving] = useState(false),
     [sending, setSending] = useState(false),
     [notice, setNotice] = useState("");
-  const [filter, setFilter] = useState({ type: "", from: "", to: "" });
-  const [allHistory, setAllHistory] = useState(false);
-  const historyQuery = (() => {
-    if (!deviceId && !allHistory) return null;
-    if (filter.from && filter.to && filter.from > filter.to) return null;
-    const params = new URLSearchParams();
-    if (allHistory) params.set("scope", "all");
-    if (filter.type) params.set("type", filter.type);
-    if (filter.from) params.set("from", new Date(filter.from).toISOString());
-    if (filter.to) params.set("to", new Date(filter.to).toISOString());
-    return params.toString();
-  })();
-  const historyRecords = useRecords<EventRow>(
-    allHistory ? "events" : `devices/${deviceId}/events`,
-    historyQuery,
-    `${allHistory ? JSON.stringify(overview?.devices.map((d) => overview?.snapshots[d.deviceId]?.eventCount)) : snapshot?.eventCount}:${connected}`,
-  );
-  const events = historyRecords.items;
-  const historyError =
-    historyQuery === null
-      ? deviceId || allHistory
-        ? "O início deve ser anterior ao fim."
-        : ""
-      : historyRecords.error;
   const [now, setNow] = useState(Date.now());
   const initialized = useRef(false);
   const state = snapshot?.device.state;
@@ -321,6 +297,7 @@ export function DeviceApp({
           {page !== "dashboard" &&
             page !== "iluminacao" &&
             page !== "assistencia" &&
+            page !== "administracao" &&
             deviceContext}
           <FleetAlerts
             overview={overview}
@@ -386,39 +363,21 @@ export function DeviceApp({
               command={command}
             />
           )}
-          <div hidden={page !== "administracao"}>
-            <FleetAdmin overview={overview} connected={connected} />
-            <label className="history-scope">
-              Históricos
-              <Select
-                label="Abrangência do histórico"
-                value={allHistory ? "all" : "selected"}
-                onValueChange={(value) => setAllHistory(value === "all")}
-                options={[
-                  { value: "selected", label: "Dispositivo selecionado" },
-                  { value: "all", label: "Todos os dispositivos" },
-                ]}
-              />
-            </label>
+          {page === "administracao" && (
             <AdminView
               snapshot={snapshot}
               connected={connected}
-              events={events}
-              filter={filter}
-              setFilter={setFilter}
-              historyError={historyError}
+              active={active}
+              deviceContext={deviceContext}
+              overview={overview}
               demo={demo}
-              historyRecords={historyRecords}
-              deviceNames={deviceNames}
             />
-            <ArchiveLists
-              snapshot={snapshot}
-              connected={connected}
-              scope={allHistory ? "all" : deviceId}
+          )}
+          <div hidden={page !== "historico"}>
+            <HistoryView
+              deviceId={deviceId}
+              active={active && page === "historico"}
               deviceNames={deviceNames}
-              revision={
-                allHistory ? JSON.stringify(overview?.snapshots) : undefined
-              }
             />
           </div>
           <footer>

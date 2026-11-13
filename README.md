@@ -160,7 +160,8 @@ A barra lateral pode ser expandida ou recolhida. No celular, o botão de menu ab
 | Dashboard | cartões de todos os leitos; ícones e sinais visuais de movimento, luz, relógio, presença e chamados simultâneos |
 | Iluminação e movimento | estado da luz/PIR; cartão único de ajustes com prévia de brilho, horários próprios, detalhes e três gráficos por leito |
 | Assistência | pedido ativo, acionamentos do botão, tempo desde abertura, reconhecer/encerrar e resultados das últimas ações |
-| Administração | descoberta/associação, correção de nomes, históricos por dispositivo ou globais e diagnósticos |
+| Administração | header por dispositivo, registro/associação, configurações e diagnóstico, presença e comunicações observadas em 24 horas |
+| Histórico | dois cards paginados: Eventos/Chamados/Configurações em abas e Comandos; filtros e consulta global ou por dispositivo |
 
 Os cartões do Dashboard mostram cada estado com ícone, texto e destaque visual: lâmpada dourada com brilho quando acesa e riscada quando apagada, sinal pulsante durante movimento, sino e borda dourada para chamado pendente, confirmação para atendimento reconhecido e alerta para relógio inválido. Ao mudar um valor, há uma transição breve; heartbeats sem mudança não reiniciam essa transição. Sem dados, o cartão informa ausência de informação. Offline ou sem conexão do painel, os indicadores ficam neutros e sem animação de atividade, preservando somente a última informação recebida. Movimento reduzido desativa as animações e mantém ícones/textos/cores. Os botões ficam sempre no rodapé dos cartões; o selo Offline/Sem conexão e os indicadores neutros substituem a mensagem adicional nesses cartões.
 
@@ -188,7 +189,7 @@ A classificação usa **a agenda atual como referência**, obtida dos parâmetro
 
 Evoluções possíveis: mapa de calor por dia/horário, comparação entre leitos e duração da iluminação com identificação de lacunas.
 
-Administração permite **Carregar mais** em eventos, chamados, comandos e configurações, em páginas de 100 registros. Ao consultar páginas antigas, atualizações ao vivo preservam a consulta; **Atualizar consulta** retorna aos registros mais recentes. Eventos têm filtros por tipo/período e detalhes de identificação. Escolha Dispositivo selecionado ou Todos os dispositivos; todas as listas identificam o leito/deviceId. Chamados mostram abertura e acionamentos; comandos mostram resultado, motivo e validade; configurações mostram versões e parâmetros. Boot, sequência, tempo em execução, persistência e perdas aparecem nos diagnósticos. Esses valores refletem a última telemetria recebida, não estimativas do navegador.
+A página **Histórico** consulta eventos, chamados, comandos e configurações em páginas de 25 registros, com **Anterior**, **Próxima** e **Atualizar consulta**. Filtros e alcance global/dispositivo são independentes por coleção. IDs, parâmetros, horários, validade e motivos permanecem disponíveis nos detalhes. Configurações e diagnóstico do último estado recebido ficam na Administração.
 
 ## Circuito e controle local
 
@@ -355,6 +356,15 @@ Faça backup de SQLite com backend parado ou pela API de backup do SQLite; não 
 
 ## Interface única e ambiente Nix
 
-As contribuições funcionais de Gabriel-c0Nsp foram incorporadas em `frontend/`, preservando as quatro telas e o WebSocket. Não há segundo projeto de dashboard ou formulário de login. Links antigos `/dashboard` e `/dashboard/` redirecionam com HTTP 308 para `/`.
+As contribuições funcionais de Gabriel-c0Nsp foram incorporadas em `frontend/`, preservando a navegação integrada e o WebSocket. Não há segundo projeto de dashboard ou formulário de login. Links antigos `/dashboard` e `/dashboard/` redirecionam com HTTP 308 para `/`.
 
 O repositório mantém `flake.nix` e `flake.lock` para desenvolvimento Nix. O auxiliar `nc status` / `nc "events?limit=20"` consulta a API local sem token.
+
+
+### Observabilidade e consulta de históricos
+
+A Administração coleta presença observada e mensagens MQTT válidas recebidas, por dispositivo. A janela móvel de 24 horas termina no último minuto completo; coleta nova não reconstrói o passado. Online exige estado novo e expira após 45 segundos. Falhas do broker/backend, pausas superiores a 5 segundos e períodos anteriores à coleta são **sem observação**, não offline. Reentregas QoS contam como novos recebimentos; retidos e mensagens inválidas não contam. Último contato ao vivo é separado do último estado salvo. Agregados por minuto permanecem no SQLite por 30 dias, com limpeza horária.
+
+`GET /api/devices/:deviceId/observability?period=24h` retorna janela, início da coleta, tempos online/offline/sem observação, presença por minuto, mensagens por hora e último contato. A interface consulta somente o dispositivo ativo a cada cinco segundos e mantém o gráfico anterior em falhas, com aviso.
+
+Na página **Histórico**, use páginas de 25 registros, **Anterior**, **Próxima** e **Atualizar consulta**. As tabelas têm área limitada e rolagem própria. Páginas consultadas não se deslocam com heartbeats. Eventos filtram por tipo/recebimento; chamados por estado/abertura; configurações por resultado/criação; comandos por ação/resultado/criação. As APIs `/api/devices/:deviceId/{requests,configs,commands}` e equivalentes globais aceitam `from`, `to` e `status`; comandos aceitam também `action=ACK_HELP|CLOSE_HELP`. Cursores são vinculados à coleção, dispositivo e filtros. As rotas e o array legado de eventos permanecem disponíveis.
