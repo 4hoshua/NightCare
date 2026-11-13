@@ -1,4 +1,4 @@
-export type LightingPeriod = "24h" | "7d" | "30d";
+export type LightingPeriod = "24h" | "7d" | "30d" | "agenda";
 export type LightingAnalytics = {
   deviceId: string;
   period: LightingPeriod;

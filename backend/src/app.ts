@@ -137,7 +137,7 @@ export async function buildApp(
   app.get("/api/devices/:deviceId/lighting-analytics", async (req) => {
     const id = deviceParams.parse(req.params).deviceId;
     const query = z
-      .object({ period: z.enum(["24h", "7d", "30d"]).default("24h") })
+      .object({ period: z.enum(["24h", "7d", "30d", "agenda"]).default("24h") })
       .strict()
       .parse(req.query);
     return store.lightingAnalytics(id, query.period);

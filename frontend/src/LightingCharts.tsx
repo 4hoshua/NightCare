@@ -8,6 +8,7 @@ import {
 } from "react";
 import { api, type Snapshot } from "./model";
 import { Select } from "./Select";
+import { HelpTooltip } from "./HelpTooltip";
 import { Icon } from "./navigation";
 import {
   localTime,
@@ -102,6 +103,20 @@ function useEntered() {
   }, []);
   return entered;
 }
+function usePlotWidth(minimum: number) {
+  const ref = useRef<HTMLElement>(null);
+  const [measured, setMeasured] = useState(minimum);
+  useLayoutEffect(() => {
+    const node = ref.current;
+    if (!node) return;
+    const observer = new ResizeObserver(([entry]) =>
+      setMeasured(Math.floor(entry.contentRect.width)),
+    );
+    observer.observe(node);
+    return () => observer.disconnect();
+  }, []);
+  return [ref, Math.max(minimum, measured)] as const;
+}
 function Bar({
   x,
   width,
@@ -118,9 +133,9 @@ function Bar({
     <rect
       className={`chart-bar ${color}`}
       x={x}
-      y={20}
+      y={12}
       width={width}
-      height={150}
+      height={74}
       rx={3}
       style={{ transform: `scaleY(${entered ? ratio : 0})` }}
       aria-hidden="true"
@@ -150,8 +165,8 @@ function Axes({ max, width }: { max: number; width: number }) {
     <g aria-hidden="true" className="chart-axis">
       {[0, 0.5, 1].map((n) => (
         <g key={n}>
-          <line x1={36} x2={width - 12} y1={170 - 150 * n} y2={170 - 150 * n} />
-          <text x={29} y={174 - 150 * n} textAnchor="end">
+          <line x1={36} x2={width - 12} y1={86 - 74 * n} y2={86 - 74 * n} />
+          <text x={29} y={90 - 74 * n} textAnchor="end">
             {Math.round(max * n)}
           </text>
         </g>
@@ -167,8 +182,8 @@ function HourlyChart({ data }: { data: LightingAnalytics }) {
     Math.ceil(Math.max(...data.hourlyMovements.map((h) => h.movements)) / 2) *
       2,
   );
-  const step = 28,
-    width = 720;
+  const [plotRef, width] = usePlotWidth(400);
+  const step = (width - 48) / 24;
   const agenda = data.agendaReference;
   const spans = agenda
     ? (() => {
@@ -187,12 +202,18 @@ function HourlyChart({ data }: { data: LightingAnalytics }) {
       })()
     : [];
   return (
-    <article className="analytics-chart hourly-chart" aria-labelledby={id}>
-      <h3 id={id}>Movimentos por hora do dia</h3>
-      <p className="chart-description">
-        Cada barra soma os movimentos registrados naquela hora no período
-        selecionado.
-      </p>
+    <article
+      ref={plotRef}
+      className="analytics-chart hourly-chart"
+      aria-labelledby={id}
+    >
+      <div className="chart-title">
+        <h3 id={id}>Movimentos por hora do dia</h3>
+        <HelpTooltip label="Movimentos por hora do dia">
+          Cada barra soma os movimentos registrados naquela hora no período
+          selecionado.
+        </HelpTooltip>
+      </div>
       <div className="chart-legend">
         <span>
           <i className="motion-key" />
@@ -217,9 +238,9 @@ function HourlyChart({ data }: { data: LightingAnalytics }) {
           aria-label="Gráfico de movimentos por hora; pode ser rolado horizontalmente"
         >
           <svg
-            viewBox={`0 0 ${width} 208`}
+            viewBox={`0 0 ${width} 120`}
             className="bar-chart"
-            style={{ minWidth: 560 }}
+            style={{ width, minWidth: width, height: 120 }}
             role="group"
             aria-labelledby={id}
           >
@@ -228,9 +249,9 @@ function HourlyChart({ data }: { data: LightingAnalytics }) {
               <rect
                 key={i}
                 x={36 + (start / 60) * step}
-                y={16}
+                y={8}
                 width={((end - start) / 60) * step}
-                height={154}
+                height={78}
                 className="agenda-shade"
                 aria-hidden="true"
               />
@@ -244,27 +265,32 @@ function HourlyChart({ data }: { data: LightingAnalytics }) {
                 aria-label={`${String(h.hour).padStart(2, "0")}h: ${h.movements} movimentos`}
                 onFocus={() => setSelected(index)}
                 onMouseEnter={() => setSelected(index)}
+                onMouseLeave={() => setSelected(null)}
+                onBlur={() => setSelected(null)}
                 onClick={() => setSelected(index)}
-                onKeyDown={chartKeyboard}
+                onKeyDown={(event) => {
+                  if (event.key === "Escape") setSelected(null);
+                  else chartKeyboard(event);
+                }}
               >
                 <rect
                   x={36 + index * step}
-                  y={16}
+                  y={8}
                   width={step}
-                  height={157}
+                  height={80}
                   fill="transparent"
                 />
                 <Bar
-                  x={40 + index * step}
-                  width={20}
+                  x={36 + (index + 0.2) * step}
+                  width={step * 0.6}
                   ratio={h.movements / max}
                   color="motion-bar"
                 />
                 {index % 3 === 0 && (
                   <text
                     className="chart-label"
-                    x={50 + index * step}
-                    y={193}
+                    x={36 + (index + 0.5) * step}
+                    y={108}
                     textAnchor="middle"
                     aria-hidden="true"
                   >
@@ -278,30 +304,9 @@ function HourlyChart({ data }: { data: LightingAnalytics }) {
       )}
       <p className="chart-tooltip" aria-live="polite">
         {selected === null
-          ? "Selecione uma barra para consultar os valores."
-          : `${String(selected).padStart(2, "0")}:00–${String(selected).padStart(2, "0")}:59 · ${data.hourlyMovements[selected].movements} movimentos registrados`}
+          ? ""
+          : `${String(selected).padStart(2, "0")}:00–${String(selected).padStart(2, "0")}:59\n${data.hourlyMovements[selected].movements} movimentos`}
       </p>
-      <details className="chart-table">
-        <summary>Ver dados em tabela</summary>
-        <div className="table-scroll">
-          <table>
-            <thead>
-              <tr>
-                <th>Hora</th>
-                <th>Movimentos</th>
-              </tr>
-            </thead>
-            <tbody>
-              {data.hourlyMovements.map((h) => (
-                <tr key={h.hour}>
-                  <td>{String(h.hour).padStart(2, "0")}h</td>
-                  <td>{h.movements}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      </details>
     </article>
   );
 }
@@ -314,19 +319,26 @@ function ActivityChart({ data }: { data: LightingAnalytics }) {
       Math.max(...data.activity.flatMap((b) => [b.movements, b.lightOns])) / 2,
     ) * 2,
   );
-  const width = Math.max(720, 48 + data.activity.length * 28),
-    step = (width - 48) / data.activity.length;
+  const [plotRef, width] = usePlotWidth(
+    Math.max(400, 48 + data.activity.length * 16),
+  );
+  const step = (width - 48) / data.activity.length;
   const selectedBucket =
     selected === null
       ? null
       : data.activity.find((bucket) => bucket.bucketStart === selected);
   return (
-    <article className="analytics-chart" aria-labelledby={id}>
-      <h3 id={id}>Movimentos e acionamentos da luz</h3>
-      <p className="chart-description">
-        Contagem de registros {data.period === "24h" ? "por hora" : "por dia"};
-        os intervalos nas bordas podem ser parciais.
-      </p>
+    <article ref={plotRef} className="analytics-chart" aria-labelledby={id}>
+      <div className="chart-title">
+        <h3 id={id}>Movimentos e acionamentos da luz</h3>
+        <HelpTooltip label="Movimentos e acionamentos da luz">
+          Contagem de registros{" "}
+          {data.period === "24h" || data.period === "agenda"
+            ? "por hora"
+            : "por dia"}
+          ; os intervalos nas bordas podem ser parciais.
+        </HelpTooltip>
+      </div>
       <div className="chart-legend">
         <span>
           <i className="motion-key" />
@@ -349,9 +361,9 @@ function ActivityChart({ data }: { data: LightingAnalytics }) {
           aria-label="Gráfico comparativo; pode ser rolado horizontalmente"
         >
           <svg
-            viewBox={`0 0 ${width} 208`}
+            viewBox={`0 0 ${width} 120`}
             className="bar-chart"
-            style={{ minWidth: Math.max(560, data.activity.length * 24) }}
+            style={{ width, minWidth: width, height: 120 }}
             role="group"
             aria-labelledby={id}
           >
@@ -367,14 +379,19 @@ function ActivityChart({ data }: { data: LightingAnalytics }) {
                   aria-label={text}
                   onFocus={() => setSelected(b.bucketStart)}
                   onMouseEnter={() => setSelected(b.bucketStart)}
+                  onMouseLeave={() => setSelected(null)}
+                  onBlur={() => setSelected(null)}
                   onClick={() => setSelected(b.bucketStart)}
-                  onKeyDown={chartKeyboard}
+                  onKeyDown={(event) => {
+                    if (event.key === "Escape") setSelected(null);
+                    else chartKeyboard(event);
+                  }}
                 >
                   <rect
                     x={36 + index * step}
-                    y={16}
+                    y={8}
                     width={step}
-                    height={157}
+                    height={80}
                     fill="transparent"
                   />
                   <Bar
@@ -393,7 +410,7 @@ function ActivityChart({ data }: { data: LightingAnalytics }) {
                     0 && (
                     <text
                       x={36 + (index + 0.5) * step}
-                      y={193}
+                      y={108}
                       className="chart-label"
                       textAnchor="middle"
                       aria-hidden="true"
@@ -401,7 +418,9 @@ function ActivityChart({ data }: { data: LightingAnalytics }) {
                       {localTime(
                         b.bucketStart,
                         data.timezoneOffsetHours,
-                        data.period === "24h" ? "time" : "date",
+                        data.period === "24h" || data.period === "agenda"
+                          ? "time"
+                          : "date",
                       )}
                     </text>
                   )}
@@ -413,36 +432,9 @@ function ActivityChart({ data }: { data: LightingAnalytics }) {
       )}
       <p className="chart-tooltip" aria-live="polite">
         {selectedBucket
-          ? `${localTime(selectedBucket.start, data.timezoneOffsetHours)}–${localTime(selectedBucket.end, data.timezoneOffsetHours)} · ${selectedBucket.movements} movimentos · ${selectedBucket.lightOns} acionamentos${selectedBucket.partial ? " · intervalo parcial" : ""}`
-          : "Selecione um intervalo para consultar os valores."}
+          ? `${localTime(selectedBucket.start, data.timezoneOffsetHours)}–\n${localTime(selectedBucket.end, data.timezoneOffsetHours)}\n${selectedBucket.movements} movimentos · ${selectedBucket.lightOns} acionamentos${selectedBucket.partial ? "\nIntervalo parcial" : ""}`
+          : ""}
       </p>
-      <details className="chart-table">
-        <summary>Ver dados em tabela</summary>
-        <div className="table-scroll">
-          <table>
-            <thead>
-              <tr>
-                <th>Intervalo</th>
-                <th>Movimentos</th>
-                <th>Luz acesa</th>
-              </tr>
-            </thead>
-            <tbody>
-              {data.activity.map((b) => (
-                <tr key={b.bucketStart}>
-                  <td>
-                    {localTime(b.start, data.timezoneOffsetHours)}–
-                    {localTime(b.end, data.timezoneOffsetHours)}
-                    {b.partial ? " (parcial)" : ""}
-                  </td>
-                  <td>{b.movements}</td>
-                  <td>{b.lightOns}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      </details>
     </article>
   );
 }
@@ -454,11 +446,13 @@ function AgendaChart({ data }: { data: LightingAnalytics }) {
     inside = total && distribution ? (distribution.inside / total) * 100 : 0;
   return (
     <article className="analytics-chart agenda-chart" aria-labelledby={id}>
-      <h3 id={id}>Movimentos e agenda</h3>
-      <p className="chart-description">
-        Classificação pela agenda de referência atual, sem reconstruir agendas
-        históricas.
-      </p>
+      <div className="chart-title">
+        <h3 id={id}>Movimentos e agenda</h3>
+        <HelpTooltip label="Movimentos e agenda">
+          Classificação pela agenda de referência atual, sem reconstruir agendas
+          históricas.
+        </HelpTooltip>
+      </div>
       {!distribution ? (
         <p className="chart-empty">
           Aguardando uma agenda aplicada para classificar os movimentos.
@@ -563,14 +557,6 @@ export function LightingCharts({
       <div className="analytics-heading">
         <div>
           <p className="eyebrow">HISTÓRICO DO LEITO</p>
-          <h2>O ritmo de cada noite</h2>
-          <p className="hint">
-            Movimentos e acionamentos registrados para{" "}
-            {snapshot?.device.bed?.name ??
-              snapshot?.device.deviceId ??
-              "o dispositivo selecionado"}
-            .
-          </p>
         </div>
         <label>
           Período
@@ -582,6 +568,13 @@ export function LightingCharts({
               { value: "24h", label: "Últimas 24 horas" },
               { value: "7d", label: "Últimos 7 dias" },
               { value: "30d", label: "Últimos 30 dias" },
+              {
+                value: "agenda",
+                label: "Agenda do leito",
+                disabled:
+                  !snapshot?.device.state?.runtimeSettings &&
+                  !snapshot?.appliedConfig,
+              },
             ]}
           />
         </label>
@@ -632,16 +625,16 @@ export function LightingCharts({
           )}
           {data && (
             <>
-              <p className="analytics-reference">
-                {localTime(data.from, data.timezoneOffsetHours)}–
-                {localTime(data.to, data.timezoneOffsetHours)} · UTC
-                {data.timezoneOffsetHours >= 0 ? "+" : ""}
-                {data.timezoneOffsetHours}
-                <br />
-                {data.agendaReference
-                  ? `Agenda atual de referência: ${data.agendaReference.startTime}–${data.agendaReference.endTime}${data.agendaReference.startTime === data.agendaReference.endTime ? " (24 horas)" : ""} · ${data.agendaReference.source === "telemetry" ? "parâmetros do dispositivo" : "configuração remota confirmada"}`
-                  : "Agenda aplicada indisponível; nenhum rascunho é usado na classificação."}
-              </p>
+              <div className="analytics-context">
+                <span>
+                  Agenda{" "}
+                  {data.agendaReference
+                    ? `${data.agendaReference.startTime}–${data.agendaReference.endTime}`
+                    : "indisponível"}
+                  {period === "agenda" &&
+                    ` · ${localTime(data.from, data.timezoneOffsetHours)}–${localTime(data.to, data.timezoneOffsetHours)}`}
+                </span>{" "}
+              </div>
               <div
                 className="analytics-charts"
                 key={`${data.deviceId}:${data.period}:${entrance}`}
@@ -650,14 +643,6 @@ export function LightingCharts({
                 <ActivityChart data={data} />
                 <AgendaChart data={data} />
               </div>
-              <p className="hint analytics-quality">
-                {data.approximateTimestampCount > 0
-                  ? `${data.approximateTimestampCount} evento(s) sem horário original posicionado(s) pelo recebimento; horários e classificação desses registros são aproximados. `
-                  : ""}
-                Contagens refletem somente eventos recebidos; lacunas de
-                comunicação podem deixar registros ausentes. Acionamentos não
-                representam tempo de uso nem consumo de energia.
-              </p>
             </>
           )}
         </>

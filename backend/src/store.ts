@@ -908,6 +908,7 @@ export class Store {
             source: "confirmed",
           }
         : null;
+    if (period === "agenda" && !agenda) fail("AGENDA_UNAVAILABLE", 400);
     return lightingAnalytics(this.db, id, period, this.now(), agenda);
   }
   snapshot(id = DEVICE) {

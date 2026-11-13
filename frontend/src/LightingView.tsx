@@ -1,12 +1,18 @@
-import { useId, type CSSProperties, type FormEvent } from "react";
+import {
+  useId,
+  type CSSProperties,
+  type FormEvent,
+  type ReactNode,
+} from "react";
 import { type Settings, type Snapshot, names } from "./model";
 import { DeviceSignals } from "./DeviceSignals";
-import { Freshness, ConfigurationDetails } from "./views";
 import { Icon } from "./navigation";
 import { TimePicker } from "./TimePicker";
+import { HelpTooltip } from "./HelpTooltip";
 import { LightingCharts } from "./LightingCharts";
 import type { LightingPeriod } from "./lighting-model";
 export function LightingView({
+  deviceContext,
   snapshot,
   connected,
   active,
@@ -18,9 +24,8 @@ export function LightingView({
   canConfigure,
   period,
   onPeriodChange,
-  detailsOpen,
-  onDetailsChange,
 }: {
+  deviceContext: ReactNode;
   snapshot: Snapshot | null;
   connected: boolean;
   active: boolean;
@@ -32,8 +37,6 @@ export function LightingView({
   canConfigure: boolean;
   period: LightingPeriod;
   onPeriodChange: (period: LightingPeriod) => void;
-  detailsOpen: boolean;
-  onDetailsChange: (open: boolean) => void;
 }) {
   const state = snapshot?.device.state,
     live = connected && !!snapshot?.device.online;
@@ -52,18 +55,13 @@ export function LightingView({
                 ? "O caminho está iluminado."
                 : "Iluminação em espera."}
           </h2>
-          <Freshness snapshot={snapshot} connected={connected} />
-          <p className="lighting-current">
-            {state
-              ? `Modo em uso: ${names[state.mode]} · Brilho configurado: ${state.brightnessPct}%`
-              : "Os valores aparecem após o primeiro estado recebido."}
-          </p>
           {state && !state.clockValid && (
             <span className="pill waiting">
               <Icon name="warning" /> Relógio inválido ou em teste
             </span>
           )}
         </div>
+        {deviceContext}
         <div data-signal-live={live}>
           <DeviceSignals
             state={state ?? null}
@@ -76,7 +74,9 @@ export function LightingView({
         <div className="section-title">
           <div>
             <p className="eyebrow">AJUSTES DE ILUMINAÇÃO</p>
-            <h2>Uma configuração, no seu ritmo.</h2>
+            <h2 className="lighting-heading-spacer" aria-hidden="true">
+              Uma configuração, no seu ritmo.
+            </h2>
           </div>
           <span
             className={`pill ${dirty ? "waiting" : desired?.status === "APPLIED" ? "success" : "waiting"}`}
@@ -90,7 +90,17 @@ export function LightingView({
         </div>
         <form onSubmit={save}>
           <fieldset className="lighting-mode">
-            <legend>Modo a aplicar</legend>
+            <legend>
+              Modo a aplicar{" "}
+              <HelpTooltip label="Modo de iluminação">
+                {form.mode === "AUTO"
+                  ? "Automático: movimento acende a luz dentro da agenda."
+                  : form.mode === "ON"
+                    ? "Ligado: mantém a luz acesa no brilho configurado."
+                    : "Desligado: mantém a luz apagada."}{" "}
+                A mudança só é enviada ao aplicar.
+              </HelpTooltip>
+            </legend>
             <div className="lighting-mode-options">
               {(["AUTO", "ON", "OFF"] as const).map((mode) => (
                 <label className="mode-option" key={mode}>
@@ -116,14 +126,6 @@ export function LightingView({
                 </label>
               ))}
             </div>
-            <p className="hint">
-              {form.mode === "AUTO"
-                ? "Automático: movimento acende a luz dentro da agenda."
-                : form.mode === "ON"
-                  ? "Ligado: mantém a luz acesa no brilho configurado."
-                  : "Desligado: mantém a luz apagada."}{" "}
-              A mudança só é enviada ao aplicar.
-            </p>
           </fieldset>
           <div className="lighting-form-grid">
             <div
@@ -137,7 +139,13 @@ export function LightingView({
               }
             >
               <div className="brightness-heading">
-                <label htmlFor={brightnessId}>Brilho a aplicar</label>
+                <div className="label-with-help">
+                  <label htmlFor={brightnessId}>Brilho a aplicar</label>{" "}
+                  <HelpTooltip label="Prévia de brilho">
+                    Prévia local de brilho. A lâmpada acima não representa uma
+                    mudança já aplicada ao dispositivo.
+                  </HelpTooltip>
+                </div>
                 <output htmlFor={brightnessId}>{form.brightnessPct}%</output>
               </div>
               <div className="brightness-preview" aria-hidden="true">
@@ -162,10 +170,6 @@ export function LightingView({
                 <span>1%</span>
                 <span>100%</span>
               </div>
-              <p className="hint">
-                Prévia local de brilho. A lâmpada acima não representa uma
-                mudança já aplicada ao dispositivo.
-              </p>
             </div>
             <div className="lighting-schedule">
               <label>
@@ -181,6 +185,16 @@ export function LightingView({
                   }
                 />
               </label>
+              <div className="schedule-label">
+                Agenda{" "}
+                <HelpTooltip label="Agenda de iluminação">
+                  São Paulo · UTC−3.{" "}
+                  {form.startTime === form.endTime
+                    ? "Horários iguais: agenda de 24 horas."
+                    : "A agenda pode atravessar a meia-noite."}{" "}
+                  O botão de ajuda funciona a qualquer hora.
+                </HelpTooltip>
+              </div>
               <div className="time-pair">
                 <label>
                   Início da agenda
@@ -201,13 +215,6 @@ export function LightingView({
                   />
                 </label>
               </div>
-              <p className="hint">
-                São Paulo · UTC−3.{" "}
-                {form.startTime === form.endTime
-                  ? "Horários iguais: agenda de 24 horas."
-                  : "A agenda pode atravessar a meia-noite."}{" "}
-                O botão de ajuda funciona a qualquer hora.
-              </p>
             </div>
           </div>
           <div className="lighting-apply">
@@ -215,32 +222,15 @@ export function LightingView({
               {saving ? "Enviando…" : "Aplicar configuração"}
               <Icon name="arrow" />
             </button>
-            <p className="hint">
+            <HelpTooltip label="Aplicar configuração">
               {!canConfigure
                 ? "Associe o dispositivo a um leito para configurar."
                 : !connected
                   ? "Aguarde a conexão para enviar."
                   : "Envia modo, brilho, prazo e agenda juntos. A aplicação depende da confirmação do dispositivo."}
-            </p>
+            </HelpTooltip>
           </div>
         </form>
-        <details
-          className="lighting-details"
-          open={detailsOpen}
-          onToggle={(event) => {
-            if (event.currentTarget.open !== detailsOpen)
-              onDetailsChange(event.currentTarget.open);
-          }}
-        >
-          <summary>
-            <Icon name="settings" />
-            {detailsOpen ? "Ocultar detalhes" : "Ver detalhes"}
-            <Icon name="expand" />
-          </summary>
-          <div className="configuration-detail-body">
-            <ConfigurationDetails snapshot={snapshot} connected={connected} />
-          </div>
-        </details>
       </section>
       <LightingCharts
         snapshot={snapshot}

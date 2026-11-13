@@ -239,3 +239,81 @@ test("daytime agenda includes start, excludes end and preserves minute precision
   assert.equal(insideAgenda(17 * 60 + 45, agenda), false);
   assert.equal(insideAgenda(23 * 60, agenda), false);
 });
+
+test("agenda period uses the latest applied window, clips active windows and excludes boundaries", () => {
+  const cases = [
+    {
+      start: "22:30",
+      end: "06:15",
+      at: "2026-11-12T12:15:00Z",
+      from: "2026-11-12T01:30:00Z",
+      to: "2026-11-12T09:15:00Z",
+    },
+    {
+      start: "22:30",
+      end: "06:15",
+      at: "2026-11-12T05:00:00Z",
+      from: "2026-11-12T01:30:00Z",
+      to: "2026-11-12T05:00:00Z",
+    },
+    {
+      start: "08:00",
+      end: "10:00",
+      at: "2026-11-12T12:15:00Z",
+      from: "2026-11-12T11:00:00Z",
+      to: "2026-11-12T12:15:00Z",
+    },
+    {
+      start: "08:00",
+      end: "10:00",
+      at: "2026-11-12T10:00:00Z",
+      from: "2026-11-11T11:00:00Z",
+      to: "2026-11-11T13:00:00Z",
+    },
+    {
+      start: "00:00",
+      end: "00:00",
+      at: "2026-11-12T12:15:00Z",
+      from: "2026-11-12T03:00:00Z",
+      to: "2026-11-12T12:15:00Z",
+    },
+  ];
+  for (const c of cases) {
+    const s = new Store(":memory:", () => Date.parse(c.at), root);
+    try {
+      state(s, {
+        runtimeSettings: { ...runtime, startTime: c.start, endTime: c.end },
+      });
+      event(s, "before", new Date(Date.parse(c.from) - 1).toISOString());
+      event(s, "start", c.from);
+      event(s, "end", c.to);
+      const a = s.lightingAnalytics(id, "agenda");
+      assert.equal(a.from, Date.parse(c.from));
+      assert.equal(a.to, Date.parse(c.to));
+      assert.equal(a.totals.movements, 1);
+      assert.deepEqual(a.agendaDistribution, { inside: 1, outside: 0 });
+      assert.equal(
+        a.activity.reduce((n, b) => n + b.movements, 0),
+        1,
+      );
+    } finally {
+      s.close();
+    }
+  }
+});
+test("agenda API requires an applied reference and accepts agenda as a period", async () => {
+  const s = new Store(":memory:", () => now, root),
+    app = await buildApp(s);
+  try {
+    state(s);
+    const url = `/api/devices/${id}/lighting-analytics?period=agenda`;
+    assert.equal((await app.inject({ method: "GET", url })).statusCode, 400);
+    state(s, { runtimeSettings: runtime, sequence: 2 });
+    const response = await app.inject({ method: "GET", url });
+    assert.equal(response.statusCode, 200);
+    assert.equal(response.json().period, "agenda");
+  } finally {
+    await app.close();
+    s.close();
+  }
+});

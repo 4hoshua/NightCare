@@ -4,7 +4,7 @@ import type Database from "better-sqlite3";
 // millisecond boundaries despite floating point conversion through julianday.
 export const EVENT_TIME_SQL =
   "COALESCE(CAST(ROUND((julianday(occurred_at)-2440587.5)*86400000) AS INTEGER),received_at)";
-export type LightingPeriod = "24h" | "7d" | "30d";
+export type LightingPeriod = "24h" | "7d" | "30d" | "agenda";
 export type AgendaReference = {
   startTime: string;
   endTime: string;
@@ -30,12 +30,22 @@ export function lightingAnalytics(
   now: number,
   agenda: AgendaReference | null,
 ) {
-  const days = period === "24h" ? 1 : period === "7d" ? 7 : 30;
-  const from = now - days * 86400000,
-    to = now;
   const timezoneOffsetHours = agenda?.timezoneOffsetHours ?? -3,
     offset = timezoneOffsetHours * 3600000;
-  const step = period === "24h" ? 3600000 : 86400000;
+  const days = period === "24h" ? 1 : period === "7d" ? 7 : 30;
+  let from = now - days * 86400000,
+    to = now;
+  if (period === "agenda") {
+    if (!agenda) throw new Error("AGENDA_UNAVAILABLE");
+    const start = minute(agenda.startTime),
+      end = minute(agenda.endTime);
+    const day = Math.floor((now + offset) / 86400000) * 86400000 - offset;
+    from = day + start * 60000;
+    if (from > now) from -= 86400000;
+    const duration = (end - start + 1440) % 1440 || 1440;
+    to = Math.min(now, from + duration * 60000);
+  }
+  const step = period === "24h" || period === "agenda" ? 3600000 : 86400000;
   const first = Math.floor((from + offset) / step) * step - offset;
   const activity = [];
   for (let start = first; start < to; start += step)

@@ -83,7 +83,6 @@ export function DeviceApp({
     window.scrollTo(0, 0);
   }, [page, active]);
   const [lightingPeriod, setLightingPeriod] = useState<LightingPeriod>("24h");
-  const [lightingDetails, setLightingDetails] = useState(false);
   const [error, setError] = useState("");
   const [form, setForm] = useState<Settings>(defaults),
     [dirty, setDirty] = useState(false),
@@ -204,6 +203,36 @@ export function DeviceApp({
   const currentPage = pages.find((p) => p.id === page)!;
   const online = connected && !!snapshot?.device.online;
   const activeRequest = !!overview?.devices.some((d) => d.state?.requestId);
+  const deviceContext = (
+    <section
+      className="device-context"
+      aria-label="Dispositivo em acompanhamento"
+    >
+      <label className="bed-picker">
+        Dispositivo em acompanhamento
+        <Select
+          label="Selecionar leito ou dispositivo"
+          value={deviceId}
+          onValueChange={(value) => onSelect(value)}
+          options={
+            overview?.devices.length
+              ? overview.devices.map((d) => ({
+                  value: d.deviceId,
+                  label: d.bed?.name ?? `Sem leito · ${d.deviceId}`,
+                }))
+              : [
+                  {
+                    value: "",
+                    label: "Aguardando dispositivos",
+                    disabled: true,
+                  },
+                ]
+          }
+        />
+      </label>
+      <span className="mono">{deviceId || "Nenhum dispositivo"}</span>
+    </section>
+  );
   return (
     <div className={`app-shell ${collapsed ? "nav-collapsed" : ""}`}>
       <a
@@ -288,36 +317,7 @@ export function DeviceApp({
               </span>
             </div>
           </div>
-          {page !== "dashboard" && (
-            <section
-              className="device-context"
-              aria-label="Dispositivo em acompanhamento"
-            >
-              <label className="bed-picker">
-                Dispositivo em acompanhamento
-                <Select
-                  label="Selecionar leito ou dispositivo"
-                  value={deviceId}
-                  onValueChange={(value) => onSelect(value)}
-                  options={
-                    overview?.devices.length
-                      ? overview.devices.map((d) => ({
-                          value: d.deviceId,
-                          label: d.bed?.name ?? `Sem leito · ${d.deviceId}`,
-                        }))
-                      : [
-                          {
-                            value: "",
-                            label: "Aguardando dispositivos",
-                            disabled: true,
-                          },
-                        ]
-                  }
-                />
-              </label>
-              <span className="mono">{deviceId || "Nenhum dispositivo"}</span>
-            </section>
-          )}
+          {page !== "dashboard" && page !== "iluminacao" && deviceContext}
           <FleetAlerts
             overview={overview}
             connected={connected}
@@ -356,6 +356,7 @@ export function DeviceApp({
           )}
           {page === "iluminacao" && (
             <LightingView
+              deviceContext={deviceContext}
               snapshot={snapshot}
               connected={connected}
               form={form}
@@ -366,8 +367,6 @@ export function DeviceApp({
               active={active}
               period={lightingPeriod}
               onPeriodChange={setLightingPeriod}
-              detailsOpen={lightingDetails}
-              onDetailsChange={setLightingDetails}
               canConfigure={!!snapshot?.device.bed}
             />
           )}
