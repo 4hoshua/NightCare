@@ -20,12 +20,16 @@ Use uma linha por comando. Anote os valores antes de testar. Para isolar ensaios
 | `fuso N` | offset UTC inteiro −12..+14, sem horário de verão |
 | `hora HH:MM` | congela horário de teste da agenda; não autoriza comandos remotos |
 | `hora invalida` | simula relógio inválido; AUTO aceita movimento em qualquer horário |
-| `hora real` | volta ao relógio real; aguardar NTP para atendimento remoto |
+| `hora real` | volta ao relógio real e solicita nova sincronização NTP; aguardar a mensagem de sincronização para atendimento remoto |
 | `reconhecer`, `encerrar` | transições locais de teste; encerramento exige reconhecimento prévio |
 | `reiniciar` | reinício do ESP32 para ensaiar NVS |
 | `rede off`, `rede on` | apenas demo: pausa/restaura Wi-Fi sem parar o firmware |
 
 ## Ensaios locais
+
+O boot inicia NTP automaticamente: reiniciar backend e simulação não exige `hora real`. Na demo, cada comando remoto inédito aguarda uma nova sincronização antes de ser aplicado, pois o tempo do [Wokwi pode avançar mais devagar que o real](https://docs.wokwi.com/guides/esp32-wifi). Na modalidade TLS, divergências de horário também acionam essa recuperação. A espera não bloqueia controles locais e dura no máximo 30 s simulados; depois, sem sincronização, o dispositivo retorna `CLOCK_SYNC_TIMEOUT`. A intenção original não recebe prazo novo: continuam exigidos validade de 60 s e emissão no máximo 5 s adiante, conferidas depois da resposta NTP. Assim, simulação pausada/lenta ou ausência de rede podem resultar em recusa real, sem intervenção serial para restaurar a sincronização automática.
+
+`hora real` permanece um recurso de diagnóstico e de saída dos modos explícitos `hora HH:MM`/`hora invalida`. Esses modos de teste não permitem atendimento remoto nem são ativados automaticamente no boot. Não altere o fuso para compensar atraso: ele controla a agenda, não a validade UTC do comando.
 
 Os passos abaixo se aplicam ao ESP32 do terminal selecionado. Observações de PIR, LED e buzzer são evidências do circuito, não ações no dashboard. O prazo é medido após o PIR ficar inativo, pelo tempo da simulação.
 

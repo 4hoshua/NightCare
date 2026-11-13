@@ -10,6 +10,7 @@
 #include <ArduinoJson.h>
 #include <mqtt_client.h>
 #include <esp_idf_version.h>
+#include <esp_sntp.h>
 #include <freertos/FreeRTOS.h>
 #include <freertos/queue.h>
 // No navegador, a aba mqtt_demo.h seleciona automaticamente a demonstracao.
@@ -51,6 +52,7 @@ String commandJournal = "[]";
 String bootId;
 uint32_t eventCounter = 0;
 bool networkPausedForTest = false;
+std::atomic<uint32_t> ntpSyncGeneration{0};
 
 // ---------- Hardware ----------
 
@@ -140,6 +142,8 @@ struct TimeService {
   bool previousConnected = false;
   bool previousValid = false;
   unsigned long lastWifiAttemptMs = 0;
+  uint32_t observedSyncGeneration = 0;
+  uint32_t lastSyncRequestMs = 0;
 
   void configureTimezone() {
     char timezone[16];
@@ -153,7 +157,24 @@ struct TimeService {
       -config.utcOffset
     );
 
+    // O tempo simulado pode avancar mais devagar que o backend real.
+    // Reconsultar NTP na demo reduz a deriva; nao ampliar a validade de comandos.
+#if NIGHTCARE_DEMO
+    esp_sntp_set_sync_interval(15000);
+#endif
+    esp_sntp_set_time_sync_notification_cb([](struct timeval*) {
+      ntpSyncGeneration.fetch_add(1);
+    });
     configTzTime(timezone, "pool.ntp.org");
+    lastSyncRequestMs = millis();
+  }
+
+  void requestCommandSync(uint32_t now) {
+    // Agrupar comandos e respeitar o intervalo minimo de consultas SNTP.
+    if (testMode == -1 && !networkPausedForTest && WiFi.status() == WL_CONNECTED &&
+        uint32_t(now - lastSyncRequestMs) >= 15000 && esp_sntp_restart()) {
+      lastSyncRequestMs = now;
+    }
   }
 
   void begin() {
@@ -171,6 +192,11 @@ struct TimeService {
   }
 
   void update(unsigned long now) {
+    const uint32_t generation = ntpSyncGeneration.load();
+    if (generation != observedSyncGeneration) {
+      observedSyncGeneration = generation;
+      Serial.println("[RELOGIO] Sincronizado por NTP.");
+    }
     const bool connected = WiFi.status() == WL_CONNECTED;
 
     if (connected != previousConnected) {
@@ -983,6 +1009,8 @@ void handleCommand(const char* command) {
     configurationChanged = true;
   } else if (strcmp(command, "hora real") == 0) {
     clockService.testMode = -1;
+    clockService.configureTimezone();
+    Serial.println("[RELOGIO] Sincronizacao NTP solicitada; aguarde antes de enviar comandos remotos.");
   } else if (strcmp(command, "hora invalida") == 0) {
     clockService.testMode = 0;
   } else if (strncmp(command, "hora ", 5) == 0) {
@@ -1232,7 +1260,20 @@ bool validId(const String& value) {
   for(size_t i=0;i<value.length();++i) if(!isalnum(value[i]) && value[i]!='-' && value[i]!='_') return false;
   return true;
 }
-void applyRemoteCommand(JsonDocument& doc, bool retained) {
+// Comandos aguardam no loop, nunca na callback de rede. A espera e limitada,
+// e uma sincronizacao posterior ao recebimento permite revalidar a mesma intencao.
+struct WaitingCommand {
+  String id;
+  String fingerprint;
+  String payload;
+  uint32_t generation;
+  uint32_t receivedMs;
+};
+WaitingCommand waitingCommands[8];
+size_t waitingCommandCount = 0;
+constexpr uint32_t COMMAND_CLOCK_TIMEOUT_MS = 30000;
+
+void applyRemoteCommand(JsonDocument& doc, bool retained, bool afterClockSync) {
   const String id = doc["commandId"] | ""; const String request = doc["requestId"] | ""; const String action = doc["action"] | "";
   if (!validId(id) || !validId(request)) return;
   JsonDocument ack; ack["commandId"] = id; ack["requestId"] = request;
@@ -1244,11 +1285,36 @@ void applyRemoteCommand(JsonDocument& doc, bool retained) {
     const bool same = String(entry["fingerprint"] | "") == fingerprint;
     sendAck(ack,same ? "APPLIED" : "REJECTED",same ? "ALREADY_APPLIED" : "ID_CONFLICT"); return;
   }
+  for (size_t i = 0; i < waitingCommandCount; ++i) if (waitingCommands[i].id == id) {
+    if (waitingCommands[i].fingerprint != fingerprint) sendAck(ack,"REJECTED","ID_CONFLICT");
+    return; // Retransmissao igual aguarda o resultado original.
+  }
   time_t issued = 0, expires = 0; const time_t now = time(nullptr);
-  if (clockService.testMode != -1 || !clockService.valid || now < 1704067200) { sendAck(ack,"REJECTED","CLOCK_INVALID"); return; }
-  if (!parseUtc(doc["issuedAt"] | "",issued) || !parseUtc(doc["expiresAt"] | "",expires) || expires-issued != 60 || issued > now+5 || now >= expires) { sendAck(ack,"REJECTED","EXPIRED_OR_INVALID_TIME"); return; }
+  if (clockService.testMode != -1) { sendAck(ack,"REJECTED","CLOCK_INVALID"); return; }
+  if (!parseUtc(doc["issuedAt"] | "",issued) || !parseUtc(doc["expiresAt"] | "",expires) || expires-issued != 60) {
+    sendAck(ack,"REJECTED","EXPIRED_OR_INVALID_TIME"); return;
+  }
   if (request != assistance.requestId || assistance.state == AssistanceState::NONE) { sendAck(ack,"REJECTED","REQUEST_MISMATCH"); return; }
   if (!((action == "ACK_HELP" && assistance.state == AssistanceState::PENDING) || (action == "CLOSE_HELP" && assistance.state == AssistanceState::ACKNOWLEDGED))) { sendAck(ack,"REJECTED","INVALID_TRANSITION"); return; }
+  const bool realClockValid = clockService.valid && now >= 1704067200;
+  const bool timeValid = realClockValid && issued <= now+5 && now < expires;
+  // Na demo, tempo simulado nao mede tempo real: exigir uma amostra NTP nova
+  // em toda intencao inedita. No hardware/TLS, recuperar divergencias tambem.
+  if (!afterClockSync && (NIGHTCARE_DEMO || !timeValid)) {
+    if (waitingCommandCount == 8) { sendAck(ack,"REJECTED","COMMAND_QUEUE_FULL"); return; }
+    auto& waiting = waitingCommands[waitingCommandCount++];
+    waiting.id = id; waiting.fingerprint = fingerprint;
+    waiting.payload = ""; serializeJson(doc,waiting.payload);
+    waiting.generation = ntpSyncGeneration.load(); waiting.receivedMs = millis();
+    clockService.requestCommandSync(waiting.receivedMs);
+    Serial.println("[COMANDO] Aguardando sincronizacao automatica para validar horario.");
+    return;
+  }
+  if (!realClockValid) { sendAck(ack,"REJECTED","CLOCK_INVALID"); return; }
+  if (!timeValid) {
+    Serial.printf("[COMANDO] Recusado apos sincronizacao | UTC dispositivo=%lld | emissao=%lld | expiracao=%lld.\n", (long long)now, (long long)issued, (long long)expires);
+    sendAck(ack,"REJECTED","EXPIRED_OR_INVALID_TIME"); return;
+  }
   // Atomically store resulting assistance state and idempotency journal in the SAME NVS value.
   const auto previousState = assistance.state; const auto previousCount = assistance.pressCount;
   const String previousId = assistance.requestId; const String previousJournal = commandJournal;
@@ -1265,11 +1331,33 @@ void applyRemoteCommand(JsonDocument& doc, bool retained) {
   recordEvent(action == "ACK_HELP" ? "HELP_ACKNOWLEDGED" : "HELP_CLOSED",request.c_str());
   sendAck(ack,"APPLIED","OK");
 }
+void updateWaitingCommands(uint32_t now) {
+  if (!waitingCommandCount) return;
+  const auto& first = waitingCommands[0];
+  const bool timedOut = uint32_t(now - first.receivedMs) >= COMMAND_CLOCK_TIMEOUT_MS;
+  const bool synchronized = ntpSyncGeneration.load() != first.generation;
+  const bool testClock = clockService.testMode != -1;
+  if (!timedOut && !synchronized && !testClock) {
+    clockService.requestCommandSync(now);
+    return;
+  }
+  JsonDocument doc; deserializeJson(doc,first.payload);
+  for (size_t i = 0; i+1 < waitingCommandCount; ++i) waitingCommands[i] = waitingCommands[i+1];
+  waitingCommands[--waitingCommandCount] = WaitingCommand{};
+  if (timedOut || testClock) {
+    JsonDocument ack; ack["commandId"] = doc["commandId"]; ack["requestId"] = doc["requestId"];
+    sendAck(ack,"REJECTED",testClock ? "CLOCK_INVALID" : "CLOCK_SYNC_TIMEOUT");
+  } else {
+    // Revalidar chamado, transicao, diario NVS e prazo; nao recriar/enviar comando.
+    applyRemoteCommand(doc,false,true);
+  }
+}
 void updateConnectivity(unsigned long now) {
   if (inputs.motion != lastMotion) { lastMotion = inputs.motion; recordEvent(lastMotion ? "MOTION_STARTED" : "MOTION_ENDED"); }
   const bool light = lighting.appliedPwm > 0;
   if (light != lastLight) { lastLight = light; recordEvent(light ? "LIGHT_ON" : "LIGHT_OFF"); }
   if (!mqttClient) return;
+  updateWaitingCommands(now);
   const bool ready = WiFi.status() == WL_CONNECTED && (!MQTT_USE_TLS || time(nullptr) >= 1704067200);
   if (!mqttStarted && ready) { mqttStarted = esp_mqtt_client_start(mqttClient) == ESP_OK; }
   if (mqttNeedsRetry && retryStartedMs == 0) retryStartedMs = now;
@@ -1287,7 +1375,7 @@ void updateConnectivity(unsigned long now) {
     JsonDocument doc;
     if (!deserializeJson(doc,incoming.payload)) {
       if (strcmp(incoming.topic,configTopic.c_str()) == 0) applyRemoteConfig(doc);
-      else if (strcmp(incoming.topic,commandsTopic.c_str()) == 0) applyRemoteCommand(doc,incoming.retained);
+      else if (strcmp(incoming.topic,commandsTopic.c_str()) == 0) applyRemoteCommand(doc,incoming.retained,false);
     }
   }
   int packetId;

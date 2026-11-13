@@ -53,6 +53,8 @@ export function notificationReason(reason: string) {
     INVALID_COMMAND: "O dispositivo recusou um comando inválido.",
     ID_CONFLICT: "O identificador já pertence a outra operação.",
     CLOCK_INVALID: "O relógio do dispositivo não permite validar o comando.",
+    CLOCK_SYNC_TIMEOUT: "O dispositivo não conseguiu sincronizar o relógio a tempo. Verifique a rede e tente novamente.",
+    COMMAND_QUEUE_FULL: "O dispositivo já tem muitas ações aguardando sincronização. Aguarde os resultados antes de tentar novamente.",
     EXPIRED_OR_INVALID_TIME: "O comando expirou ou tem horários inválidos.",
     REQUEST_MISMATCH: "O chamado atual é diferente do informado no comando.",
     INVALID_TRANSITION: "A ação não é permitida no estado atual do chamado.",
