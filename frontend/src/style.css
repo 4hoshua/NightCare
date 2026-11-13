@@ -1769,3 +1769,33 @@ button.secondary {
   .notification-toasts { bottom:16px; right:16px; }
 }
 @media(prefers-reduced-motion:reduce) { .notification-panel,.notification-toast { animation:none; } }
+
+/* Seletores compartilhados: a lista usa portal para escapar do scroll dos painéis. */
+.app-select { display:block; width:100%; min-width:0; }
+.app-select-trigger { width:100%; min-width:0; min-height:44px; padding:11px 12px; justify-content:space-between; gap:12px; border:1px solid var(--line); border-radius:8px; background:#1c1f28; color:var(--ink); font-size:13px; font-weight:400; text-align:left; transition:border-color 160ms, background 160ms; }
+.app-select-trigger > span { min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.app-select-trigger:hover:enabled { background:#242833; border-color:#6b604a; filter:none; }
+.app-select.is-open .app-select-trigger { border-color:#e3c17b99; background:#242833; }
+.app-select-trigger .app-select-chevron { width:16px; height:16px; color:var(--accent); transform:rotate(90deg); transition:transform 160ms; }
+.app-select.is-open .app-select-chevron { transform:rotate(-90deg); }
+.app-select-menu { position:fixed; z-index:70; padding:6px; overflow:auto; overscroll-behavior:contain; scrollbar-width:thin; scrollbar-color:#545365 #20232d; border:1px solid #595343; border-radius:11px; background:#20232d; color:var(--ink); box-shadow:0 12px 36px #080a1080; animation:select-menu-in 130ms ease-out; }
+.app-select-option { display:flex; align-items:center; justify-content:space-between; gap:12px; min-height:40px; padding:10px 11px; border-radius:6px; font-size:13px; line-height:1.5; cursor:pointer; }
+.app-select-option > span { min-width:0; overflow-wrap:anywhere; }
+.app-select-option .icon { width:16px; height:16px; color:var(--accent); }
+.app-select-option.is-selected { color:#f0d79f; background:#e3c17b0c; }
+.app-select-option.is-active { background:#e3c17b20; color:#f4dfb2; outline:1px solid #e3c17b33; outline-offset:-1px; }
+.app-select-option[aria-disabled=true] { opacity:.45; cursor:not-allowed; }
+.notification-filters .app-select-trigger { font-size:12px; padding:9px 10px; }
+.notification-read-feedback { display:flex; align-items:center; gap:7px; min-height:18px; margin:12px 0 0; color:var(--muted); font-size:11px; }
+.notification-read-feedback .icon { width:15px; height:15px; color:var(--accent); }
+.notification-panel { transform-origin:top right; }
+.notification-panel.is-open { animation:notification-panel-open 200ms cubic-bezier(.2,.75,.25,1); }
+.notification-panel.is-closing { animation:notification-panel-close 160ms ease-in both; pointer-events:none; }
+.notification-bell.is-open > .icon { transform-origin:50% 20%; animation:notification-bell-ring 420ms ease-out; }
+@keyframes select-menu-in { from { opacity:0; transform:translateY(-4px); } to { opacity:1; transform:translateY(0); } }
+@keyframes notification-panel-open { from { opacity:0; transform:translateY(-8px) scale(.97); } to { opacity:1; transform:translateY(0) scale(1); } }
+@keyframes notification-panel-close { from { opacity:1; transform:translateY(0) scale(1); } to { opacity:0; transform:translateY(-6px) scale(.98); } }
+@keyframes notification-bell-ring { 0%,100% { transform:rotate(0); } 20% { transform:rotate(-16deg); } 45% { transform:rotate(12deg); } 65% { transform:rotate(-7deg); } 82% { transform:rotate(4deg); } }
+@media(prefers-reduced-motion:reduce) {
+  .app-select-menu,.notification-panel.is-open,.notification-panel.is-closing,.notification-bell.is-open > .icon { animation:none; }
+}

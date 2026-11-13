@@ -21,6 +21,7 @@ import {
 import { ArchiveLists, useRecords } from "./records";
 import { FleetOverview, FleetAlerts, FleetAdmin, FleetApp } from "./fleet";
 import { NotificationBell } from "./notifications";
+import { Select } from "./Select";
 import "./style.css";
 export function DeviceApp({
   deviceId,
@@ -331,20 +332,25 @@ export function DeviceApp({
             >
               <label className="bed-picker">
                 Dispositivo em acompanhamento
-                <select
-                  aria-label="Selecionar leito ou dispositivo"
+                <Select
+                  label="Selecionar leito ou dispositivo"
                   value={deviceId}
-                  onChange={(e) => onSelect(e.target.value)}
-                >
-                  {!overview?.devices.length && (
-                    <option value="">Aguardando dispositivos</option>
-                  )}
-                  {overview?.devices.map((d) => (
-                    <option key={d.deviceId} value={d.deviceId}>
-                      {d.bed?.name ?? `Sem leito · ${d.deviceId}`}
-                    </option>
-                  ))}
-                </select>
+                  onValueChange={(value) => onSelect(value)}
+                  options={
+                    overview?.devices.length
+                      ? overview.devices.map((d) => ({
+                          value: d.deviceId,
+                          label: d.bed?.name ?? `Sem leito · ${d.deviceId}`,
+                        }))
+                      : [
+                          {
+                            value: "",
+                            label: "Aguardando dispositivos",
+                            disabled: true,
+                          },
+                        ]
+                  }
+                />
               </label>
               <span className="mono">{deviceId || "Nenhum dispositivo"}</span>
             </section>
@@ -412,14 +418,15 @@ export function DeviceApp({
             <FleetAdmin overview={overview} connected={connected} />
             <label className="history-scope">
               Históricos
-              <select
-                aria-label="Abrangência do histórico"
+              <Select
+                label="Abrangência do histórico"
                 value={allHistory ? "all" : "selected"}
-                onChange={(e) => setAllHistory(e.target.value === "all")}
-              >
-                <option value="selected">Dispositivo selecionado</option>
-                <option value="all">Todos os dispositivos</option>
-              </select>
+                onValueChange={(value) => setAllHistory(value === "all")}
+                options={[
+                  { value: "selected", label: "Dispositivo selecionado" },
+                  { value: "all", label: "Todos os dispositivos" },
+                ]}
+              />
             </label>
             <AdminView
               snapshot={snapshot}

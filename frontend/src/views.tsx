@@ -9,6 +9,7 @@ import {
 } from "./model";
 import type { Records } from "./records";
 import { RecordControls } from "./records";
+import { Select } from "./Select";
 import { Icon, type IconName } from "./navigation";
 
 type LiveProps = { snapshot: Snapshot | null; connected: boolean };
@@ -508,16 +509,16 @@ export function LightingView({
           <form onSubmit={save}>
             <label>
               Modo
-              <select
+              <Select<Settings["mode"]>
+                label="Modo"
                 value={form.mode}
-                onChange={(e) =>
-                  change("mode", e.target.value as Settings["mode"])
-                }
-              >
-                <option value="AUTO">Automático</option>
-                <option value="ON">Ligado</option>
-                <option value="OFF">Desligado</option>
-              </select>
+                onValueChange={(value) => change("mode", value)}
+                options={[
+                  { value: "AUTO", label: "Automático" },
+                  { value: "ON", label: "Ligado" },
+                  { value: "OFF", label: "Desligado" },
+                ]}
+              />
             </label>
             <div className="fields">
               <label>
@@ -854,19 +855,20 @@ export function AdminView({
         <div className="filters">
           <label>
             Tipo
-            <select
+            <Select
+              label="Tipo de evento"
               value={filter.type}
-              onChange={(e) =>
-                setFilter((f) => ({ ...f, type: e.target.value }))
+              onValueChange={(value) =>
+                setFilter((f) => ({ ...f, type: value }))
               }
-            >
-              <option value="">Todos os eventos</option>
-              {Object.entries(eventNames).map(([key, label]) => (
-                <option key={key} value={key}>
-                  {label}
-                </option>
-              ))}
-            </select>
+              options={[
+                { value: "", label: "Todos os eventos" },
+                ...Object.entries(eventNames).map(([value, label]) => ({
+                  value,
+                  label,
+                })),
+              ]}
+            />
           </label>
           <label>
             De

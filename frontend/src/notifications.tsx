@@ -8,6 +8,8 @@ import {
   type ReactNode,
 } from "react";
 import { api, date, type Overview } from "./model";
+import { Select } from "./Select";
+import { useAnimatedPresence } from "./useAnimatedPresence";
 import { Icon, type IconName } from "./navigation";
 
 const categories = {
@@ -138,6 +140,7 @@ export function NotificationProvider({
     if (!meta) return;
     const value = Math.max(readThrough, id);
     setReadState({ installationId: meta.installationId, id: value });
+    if (value >= meta.latestId) setUnread(0);
     try {
       localStorage.setItem(storageKey(meta.installationId), String(value));
     } catch {
@@ -236,7 +239,9 @@ export function NotificationProvider({
             ? "iluminacao"
             : "administracao";
       onSelect(item.deviceId, page);
-      requestAnimationFrame(() => document.getElementById(`page-content-${item.deviceId}`)?.focus());
+      requestAnimationFrame(() =>
+        document.getElementById(`page-content-${item.deviceId}`)?.focus(),
+      );
     } else {
       location.hash = "administracao";
     }
@@ -364,14 +369,16 @@ export function NotificationBell({ active }: { active: boolean }) {
     generation = useRef(0);
   const id = useId();
   const meta = overview?.notifications;
+  const present = useAnimatedPresence(open && active, 160);
+  const [readFeedback, setReadFeedback] = useState("");
   function close(returnFocus = false) {
+    document.dispatchEvent(new Event("nightcare:select-close"));
     setOpen(false);
     if (returnFocus) trigger.current?.focus();
   }
   function update() {
     const newest = meta?.latestId ?? 0;
     setBoundary(newest);
-    markRead(newest);
     setRefresh((n) => n + 1);
   }
   useEffect(() => {
@@ -383,7 +390,7 @@ export function NotificationBell({ active }: { active: boolean }) {
       if (!ref.current?.contains(event.target as Node)) close();
     };
     const key = (event: KeyboardEvent) => {
-      if (event.key === "Escape") {
+      if (event.key === "Escape" && !event.defaultPrevented) {
         event.preventDefault();
         close(true);
       }
@@ -472,7 +479,7 @@ export function NotificationBell({ active }: { active: boolean }) {
     <div className="notification-control" ref={ref}>
       <button
         ref={trigger}
-        className={`icon-button notification-bell ${unread ? "has-unread" : ""}`}
+        className={`icon-button notification-bell ${unread ? "has-unread" : ""} ${open ? "is-open" : ""}`}
         aria-label={`Notificações${unread ? `: ${unread} não lidas` : ""}`}
         aria-expanded={open && active}
         aria-haspopup="dialog"
@@ -492,9 +499,11 @@ export function NotificationBell({ active }: { active: boolean }) {
           </span>
         )}
       </button>
-      {open && active && (
+      {present && active && (
         <section
-          className="notification-panel"
+          className={`notification-panel ${open ? "is-open" : "is-closing"}`}
+          inert={!open}
+          aria-hidden={!open || undefined}
           role="dialog"
           aria-labelledby={`${id}-title`}
           id={`${id}-panel`}
@@ -515,37 +524,45 @@ export function NotificationBell({ active }: { active: boolean }) {
           <div className="notification-filters">
             <label>
               Dispositivo
-              <select
+              <Select
+                label="Dispositivo"
                 value={deviceId}
-                onChange={(e) => setDeviceId(e.target.value)}
-              >
-                <option value="">Todos os dispositivos</option>
-                {overview?.devices.map((d) => (
-                  <option key={d.deviceId} value={d.deviceId}>
-                    {d.bed?.name ?? d.deviceId}
-                  </option>
-                ))}
-              </select>
+                onValueChange={setDeviceId}
+                options={[
+                  { value: "", label: "Todos os dispositivos" },
+                  ...(overview?.devices ?? []).map((d) => ({
+                    value: d.deviceId,
+                    label: d.bed?.name ?? d.deviceId,
+                  })),
+                ]}
+              />
             </label>
             <label>
               Categoria
-              <select
+              <Select
+                label="Categoria"
                 value={category}
-                onChange={(e) => setCategory(e.target.value)}
-              >
-                <option value="">Todas as categorias</option>
-                {Object.entries(categories).map(([value, title]) => (
-                  <option key={value} value={value}>
-                    {title}
-                  </option>
-                ))}
-              </select>
+                onValueChange={setCategory}
+                options={[
+                  { value: "", label: "Todas as categorias" },
+                  ...Object.entries(categories).map(([value, label]) => ({
+                    value,
+                    label,
+                  })),
+                ]}
+              />
             </label>
           </div>
           <div className="notification-actions">
             <button
               className="notification-detail"
-              onClick={() => markRead(meta?.latestId ?? 0)}
+              disabled={!unread || !meta}
+              onClick={() => {
+                markRead(meta?.latestId ?? 0);
+                setReadFeedback(
+                  "Todas as notificações foram marcadas como lidas.",
+                );
+              }}
             >
               Marcar todas como lidas
             </button>
@@ -554,6 +571,18 @@ export function NotificationBell({ active }: { active: boolean }) {
               {(meta?.latestId ?? 0) > boundary ? " · novas notificações" : ""}
             </button>
           </div>
+          <p className="notification-read-feedback" role="status">
+            {readFeedback && !unread ? (
+              <>
+                <Icon name="check" />
+                {readFeedback}
+              </>
+            ) : unread ? (
+              `${unread} ${unread === 1 ? "notificação não lida" : "notificações não lidas"}`
+            ) : (
+              "Nenhuma notificação pendente de leitura."
+            )}
+          </p>
           {!connected && (
             <p className="notification-message" role="status">
               Sem conexão ao vivo. Exibindo o histórico já carregado.

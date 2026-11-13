@@ -25,7 +25,7 @@ O som é opcional: habilite por clique antes de abrir os pedidos. Evite ensaios 
 ## Regras de operação
 
 - **Dashboard:** mostra todos os leitos associados. Use **Buscar leito ou dispositivo** para filtrar os cartões por nome ou ID, sem diferenciar maiúsculas ou acentos; **Limpar busca** volta a exibir todos. A busca acontece no navegador. Dispositivos sem leito aparecem para associação e seus chamados conhecidos continuam visíveis, mesmo durante a busca.
-- **Sino de notificações:** abre a atividade de todos os dispositivos, com filtros, horários e **Ver detalhes** para ir à tela do destinatário. O contador representa o que este navegador ainda não viu; abrir a central marca as notificações existentes como vistas. Novidades posteriores voltam ao contador. Use **Atualizar** para trazer novidades à lista aberta, **Carregar mais** para consultar as anteriores e **Marcar todas como lidas** para zerar o contador. O histórico cobre os últimos 30 dias. Chamados e falhas também aparecem em avisos temporários; o som continua dedicado aos chamados.
+- **Sino de notificações:** abre a atividade de todos os dispositivos, com filtros, horários e **Ver detalhes** para ir à tela do destinatário. O contador representa as notificações não lidas neste navegador; abrir ou atualizar a central não zera o contador. Use **Atualizar** para trazer novidades à lista aberta, **Carregar mais** para consultar as anteriores e **Marcar todas como lidas** para zerar o contador e remover os destaques, com confirmação visível. O histórico cobre os últimos 30 dias. Chamados e falhas também aparecem em avisos temporários; o som continua dedicado aos chamados.
 - **Selecionar leito ou dispositivo:** fica na faixa **Dispositivo em acompanhamento**, dentro de Iluminação e movimento, Assistência e Administração, antes dos controles. Define o destinatário dessas telas; o ID selecionado aparece ao lado. O Dashboard tem visão global, sem seletor de leito.
 - **Iluminação:** configura modo, brilho, prazo e agenda do dispositivo selecionado. Troca rápida usa a última intenção enviada ou padrões se nenhuma existir; não publica os demais campos em edição.
 - **Assistência:** um chamado ativo por dispositivo; vários dispositivos podem ter chamados simultâneos. Reconhecer precede Encerrar. Som e lista global consideram os chamados de todos os dispositivos.
@@ -34,6 +34,8 @@ O som é opcional: habilite por clique antes de abrir os pedidos. Evite ensaios 
 - **Edições:** trocar de tela ou dispositivo preserva rascunhos e filtros na mesma página aberta. Recarregar o navegador pode descartá-los; a seleção do dispositivo fica no endereço.
 - **Presença:** painel, broker e dispositivo têm conexões distintas. Offline, valores conhecidos são última informação recebida; um dispositivo offline não altera os demais.
 - **Confirmação:** configuração desejada, configuração remota confirmada e parâmetros atuais são informações distintas. Sem telemetria dos parâmetros atuais, informar ausência, sem inventar valores.
+
+Os menus de opções seguem o tema noturno. Além do clique, aceitam setas, Home/End, busca por digitação e Enter para escolher. Escape fecha somente a lista aberta; outro Escape fecha a central. Tab avança para o próximo controle. O sino anima ao abrir, e o painel aparece/desaparece suavemente; movimento reduzido é respeitado.
 
 ## Roteiro de validação pela interface
 
@@ -170,7 +172,14 @@ Registre teste, data, executor, condição inicial, resultado observado, evidên
 - **Preparar/agir:** com dois dispositivos conectados, provoque movimento, luz e chamados de teste. Abra o sino, filtre por dispositivo/categoria, carregue mais e use **Ver detalhes**.
 - **Esperado:** cada ocorrência identifica o destinatário e horário; o link abre o dispositivo correto. Avisos importantes aparecem por oito segundos e pausam durante interação. A lista mantém as páginas consultadas até **Atualizar**.
 - **Exceção:** heartbeats não geram avisos; ausência de resultados mostra mensagem; desconexão do painel mantém os dados já carregados. Reconectar não reapresenta histórico em avisos. Uma falha do broker aparece como ocorrência global.
-- **Restaurar:** limpe os filtros, marque todas como lidas e feche por Escape. Recarregue para confirmar a leitura neste navegador; outro navegador mantém leitura própria.
+- **Restaurar:** confirme que abrir/atualizar preserva as não lidas, limpe os filtros, marque todas como lidas e observe contador/destaques zerados e confirmação. Feche por Escape. Recarregue para confirmar a leitura neste navegador; outro navegador mantém leitura própria.
+
+### I20 — menus de opções e animações
+
+- **Preparar/agir:** abra os seletores de dispositivo, modo, histórico e filtros de notificações. Escolha por clique/toque e por teclado (setas, Home/End, digitação e Enter).
+- **Esperado:** mesma aparência noturna, opção selecionada identificada e opções longas disponíveis com rolagem. A lista cabe na tela, inclusive no celular. Alterar o modo no formulário só edita o rascunho até enviar.
+- **Exceção:** Escape fecha primeiro a lista, mantendo a central; Tab avança sem escolher outra opção. Sem dispositivos, o seletor informa espera e fica indisponível. Movimento reduzido desativa as animações do sino e das listas.
+- **Restaurar:** volte aos filtros originais, descarte rascunhos de teste e feche a central; confirme abertura e fechamento suaves.
 
 ## Encerramento e pendências
 
