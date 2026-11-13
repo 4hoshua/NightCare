@@ -206,7 +206,6 @@ export function NotificationProvider({
       announce(
         incoming
           .reverse()
-          .filter((n) => n.severity !== "info")
           .map((item) => ({ title: item.title, item })),
       );
     })().catch((e) => {
