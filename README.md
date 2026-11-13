@@ -157,10 +157,12 @@ A barra lateral pode ser expandida ou recolhida. No celular, o botão de menu ab
 
 | Tela | Uso |
 | --- | --- |
-| Dashboard | cartões de todos os leitos; movimento, luz, relógio, presença e chamados simultâneos |
+| Dashboard | cartões de todos os leitos; ícones e sinais visuais de movimento, luz, relógio, presença e chamados simultâneos |
 | Iluminação e movimento | estado da luz e PIR; troca rápida de modo; edição de modo, brilho, agenda e prazo |
 | Assistência | pedido ativo, acionamentos do botão, tempo desde abertura, reconhecer/encerrar e resultados das últimas ações |
 | Administração | descoberta/associação, correção de nomes, históricos por dispositivo ou globais e diagnósticos |
+
+Os cartões do Dashboard mostram cada estado com ícone, texto e destaque visual: lâmpada dourada com brilho quando acesa e riscada quando apagada, sinal pulsante durante movimento, sino e borda dourada para chamado pendente, confirmação para atendimento reconhecido e alerta para relógio inválido. Ao mudar um valor, há uma transição breve; heartbeats sem mudança não reiniciam essa transição. Sem dados, o cartão informa ausência de informação. Offline ou sem conexão do painel, os indicadores ficam neutros e sem animação de atividade, preservando somente a última informação recebida. Movimento reduzido desativa as animações e mantém ícones/textos/cores. Os botões ficam sempre no rodapé dos cartões; o selo Offline/Sem conexão e os indicadores neutros substituem a mensagem adicional nesses cartões.
 
 O sino de notificações e o controle de som ficam disponíveis em todas as telas. Trocar de tela ou de dispositivo preserva separadamente os formulários e filtros de cada dispositivo. O áudio é global e considera qualquer chamado pendente; a lista global identifica o destinatário. A seleção fica no parâmetro `device` do endereço. A conexão em tempo real é compartilhada. Administração organiza as informações existentes; não cria um perfil de acesso separado.
 

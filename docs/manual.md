@@ -26,6 +26,7 @@ O som é opcional: habilite por clique antes de abrir os pedidos. Evite ensaios 
 
 - **Dashboard:** mostra todos os leitos associados. Use **Buscar leito ou dispositivo** para filtrar os cartões por nome ou ID, sem diferenciar maiúsculas ou acentos; **Limpar busca** volta a exibir todos. A busca acontece no navegador. Dispositivos sem leito aparecem para associação e seus chamados conhecidos continuam visíveis, mesmo durante a busca.
 - **Sino de notificações:** abre a atividade de todos os dispositivos, com filtros, horários e **Ver detalhes** para ir à tela do destinatário. O contador representa as notificações não lidas neste navegador; abrir ou atualizar a central não zera o contador. Use **Atualizar** para trazer novidades à lista aberta, **Carregar mais** para consultar as anteriores e **Marcar todas como lidas** para zerar o contador e remover os destaques, com confirmação visível. O histórico cobre os últimos 30 dias. Todas as novas notificações também aparecem em toasts com o leito/dispositivo e acesso aos detalhes, incluindo movimento, luz e presença; rajadas são resumidas em até três avisos simultâneos. O som continua dedicado aos chamados.
+- **Estados nos cartões:** luz acesa tem lâmpada dourada iluminada; apagada tem lâmpada riscada. Movimento detectado pulsa discretamente. Chamado pendente destaca sino e borda dourada; reconhecido mostra confirmação. Relógio inválido usa triângulo de alerta. Ícones acompanham os textos; sem dados aparece “Sem informação”. Offline ou sem conexão, não há animação de atividade e os valores são a última informação recebida. A preferência por movimento reduzido mantém os sinais estáticos. Os botões ficam no rodapé, alinhados entre cartões da mesma linha, sem a mensagem adicional de última informação.
 - **Selecionar leito ou dispositivo:** fica na faixa **Dispositivo em acompanhamento**, dentro de Iluminação e movimento, Assistência e Administração, antes dos controles. Define o destinatário dessas telas; o ID selecionado aparece ao lado. O Dashboard tem visão global, sem seletor de leito.
 - **Iluminação:** configura modo, brilho, prazo e agenda do dispositivo selecionado. Troca rápida usa a última intenção enviada ou padrões se nenhuma existir; não publica os demais campos em edição.
 - **Assistência:** um chamado ativo por dispositivo; vários dispositivos podem ter chamados simultâneos. Reconhecer precede Encerrar. Som e lista global consideram os chamados de todos os dispositivos.
@@ -58,7 +59,7 @@ Registre teste, data, executor, condição inicial, resultado observado, evidên
 ### I03 — movimento e iluminação independentes
 
 - **Preparar/agir:** dois leitos em AUTO, agenda 24 h e prazo 5 s. Acionar PIR somente no primeiro circuito.
-- **Esperado:** movimento/luz apenas no primeiro; luz permanece durante PIR ativo e apaga após inatividade mais prazo.
+- **Esperado:** movimento/luz apenas no primeiro; ícone de movimento pulsa e lâmpada ganha brilho dourado. A luz permanece durante PIR ativo e apaga após inatividade mais prazo; o ícone volta a lâmpada riscada e o movimento fica estático.
 - **Exceção:** movimento renovado antes do prazo mantém luz; ausência de dados em um cartão não deve copiar o estado do outro.
 - **Restaurar:** aguardar os dois circuitos em repouso.
 

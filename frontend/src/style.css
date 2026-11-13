@@ -1675,8 +1675,10 @@ button.secondary {
 .bed-grid, .registration-grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(min(100%,320px),1fr)); gap:1.4rem; margin-bottom:1.5rem; }
 .bed-card, .device-registration { min-width:0; }
 .bed-card .mono, .device-context .mono { overflow-wrap:anywhere; }
-.bed-card .actions { flex-wrap:wrap; }
+.bed-card > .actions { flex-wrap:wrap; margin-top:auto; }
 .bed-card {
+  display:flex;
+  flex-direction:column;
   transition:translate 200ms ease, border-color 200ms ease, box-shadow 200ms ease;
 }
 @media(hover:hover) and (pointer:fine) {
@@ -1798,4 +1800,51 @@ button.secondary {
 @keyframes notification-bell-ring { 0%,100% { transform:rotate(0); } 20% { transform:rotate(-16deg); } 45% { transform:rotate(12deg); } 65% { transform:rotate(-7deg); } 82% { transform:rotate(4deg); } }
 @media(prefers-reduced-motion:reduce) {
   .app-select-menu,.notification-panel.is-open,.notification-panel.is-closing,.notification-bell.is-open > .icon { animation:none; }
+}
+
+/* Sinais do Dashboard: geometria, cor e texto preservam o significado dos estados. */
+.bed-presence { display:inline-flex; align-items:center; gap:6px; }
+.bed-presence .icon { width:14px; height:14px; }
+.bed-signals { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:12px; margin:22px 0 24px; }
+.bed-signal { min-width:0; min-height:112px; padding:14px; border:1px solid #303644; border-radius:11px; background:#191c25; transition:background 240ms ease,border-color 240ms ease; }
+.bed-signal dt { display:flex; align-items:center; gap:9px; color:#a2aabc; font-size:12px; }
+.bed-signal-icon { position:relative; display:grid; place-items:center; width:32px; height:32px; border-radius:10px; flex-shrink:0; background:#252a36; color:#939db1; }
+.bed-signal-icon > .icon { position:relative; z-index:1; width:21px; height:21px; }
+.bed-signal-value { color:#c3c9d7; font-size:14px; font-weight:600; line-height:1.55; margin:11px 0 0; overflow-wrap:anywhere; }
+.bed-signal.is-light { background:#e3c17b0b; border-color:#e3c17b55; }
+.bed-signal.is-light .bed-signal-icon { background:#e3c17b1c; color:#f1ce7f; }
+.bed-signal.is-light .bed-signal-value { color:#f1d18e; }
+.bed-card[data-live=true] .bed-signal.is-light .icon { fill:#e3c17b25; filter:drop-shadow(0 0 5px #edc46c70); animation:bed-lamp-wake 380ms ease-out; }
+.bed-signal.is-motion { background:#a8bddc0b; border-color:#a8bddc55; }
+.bed-signal.is-motion .bed-signal-icon, .bed-signal.is-confirmed .bed-signal-icon { background:#a8bddc18; color:#b8d1f5; }
+.bed-signal.is-motion .bed-signal-value, .bed-signal.is-confirmed .bed-signal-value { color:#c4d7f3; }
+.bed-card[data-live=true] .bed-signal.is-motion .bed-signal-icon::after { content:""; position:absolute; inset:1px; border:1px solid #aac9f6; border-radius:10px; animation:bed-motion-ripple 2200ms ease-out infinite; }
+.bed-signal.is-pending, .bed-signal.is-warning { background:#e3c17b0c; border-color:#e3c17b66; }
+.bed-signal.is-pending .bed-signal-icon, .bed-signal.is-warning .bed-signal-icon { background:#e3c17b1c; color:#edcd87; }
+.bed-signal.is-pending .bed-signal-value, .bed-signal.is-warning .bed-signal-value { color:#f0d79f; }
+.bed-card[data-live=true] .bed-signal.is-pending { animation:bed-help-glow 2600ms ease-in-out infinite; }
+.bed-card[data-live=true] .bed-signal.is-pending .icon { transform-origin:50% 20%; animation:notification-bell-ring 650ms ease-out 3; }
+.bed-card[data-assistance=PENDING] { border-color:#e3c17b77; }
+.bed-card[data-assistance=PENDING]:not(.bed-card-exit):hover { border-color:#e3c17bcc; }
+.bed-card[data-live=true] .bed-signal-value { animation:bed-value-change 260ms ease-out; }
+.bed-signal.is-unknown .bed-signal-value { font-weight:400; color:var(--muted); }
+.bed-card[data-live=false] .bed-signal { background:#191c25; border-color:#303644; }
+.bed-card[data-live=false] .bed-signal-icon { background:#252a36; color:#929aab; }
+.bed-card[data-live=false] .bed-signal-value { color:#b5bdcd; }
+@keyframes bed-lamp-wake { from { opacity:.5; transform:scale(.85); } to { opacity:1; transform:scale(1); } }
+@keyframes bed-motion-ripple { from { opacity:.55; transform:scale(.85); } to { opacity:0; transform:scale(1.4); } }
+@keyframes bed-help-glow { 0%,100% { box-shadow:inset 0 0 0 1px #e3c17b00; } 50% { box-shadow:inset 0 0 16px #e3c17b16; } }
+@keyframes bed-value-change { from { opacity:.5; transform:translateY(3px); } to { opacity:1; transform:translateY(0); } }
+@media(max-width:600px) {
+  .bed-signals { gap:10px; }
+  .bed-signal { padding:12px; }
+  .bed-signal dt { gap:7px; font-size:11px; }
+  .bed-signal-icon { width:28px; height:28px; border-radius:8px; }
+}
+@media(prefers-reduced-motion:reduce) {
+  .bed-card[data-live=true] .bed-signal.is-light .icon,
+  .bed-card[data-live=true] .bed-signal.is-motion .bed-signal-icon::after,
+  .bed-card[data-live=true] .bed-signal.is-pending,
+  .bed-card[data-live=true] .bed-signal.is-pending .icon,
+  .bed-card[data-live=true] .bed-signal-value { animation:none; }
 }

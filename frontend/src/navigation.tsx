@@ -47,6 +47,14 @@ export function readPage(): Page {
 export type IconName =
   | "dashboard"
   | "light"
+  | "light-on"
+  | "light-off"
+  | "motion-idle"
+  | "help-check"
+  | "clock-check"
+  | "connection-off"
+  | "warning"
+  | "unknown"
   | "help"
   | "settings"
   | "motion"
@@ -64,6 +72,19 @@ export type IconName =
 const paths: Record<IconName, string> = {
   dashboard: "M3 3h7v7H3z M14 3h7v7h-7z M3 14h7v7H3z M14 14h7v7h-7z",
   light: "M9 18h6 M10 21h4 M8 14a6 6 0 1 1 8 0c-1.2 1-1 2-1 2H9s.2-1-1-2Z",
+  "light-on":
+    "M9 18h6 M10 21h4 M8 14a6 6 0 1 1 8 0c-1.2 1-1 2-1 2H9s.2-1-1-2Z M1 8h2 M21 8h2 M3 2l2 2 M21 2l-2 2",
+  "light-off":
+    "M9 18h6 M10 21h4 M8 14a6 6 0 0 1-2-5 M9 3.8A6 6 0 0 1 17 12 M9 16h6 M3 3l18 18",
+  "motion-idle": "M4 12h16 M3 7v10 M21 7v10",
+  "help-check":
+    "M12 3a8 8 0 0 0-8 8v5h9 M20 11v-1a8 8 0 0 0-8-7 M2 16h10 M9 20h3 M12 1v2 M15 19l2 2 5-6",
+  "clock-check": "M12 8v5l3 2 M20.5 9a9 9 0 1 0-7.5 12 M16 19l2 2 4-5",
+  "connection-off":
+    "M3 8a14 14 0 0 1 18 0 M7 12a9 9 0 0 1 10 0 M12 20h.01 M3 3l18 18",
+  warning: "M12 3 2 21h20L12 3Z M12 9v5 M12 17h.01",
+  unknown:
+    "M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0 M9.5 9a2.5 2.5 0 1 1 4 2c-1 .7-1.5 1-1.5 2 M12 16h.01",
   help: "M12 3a8 8 0 0 0-8 8v5h16v-5a8 8 0 0 0-8-8Z M2 16h20 M9 20h6 M12 1v2",
   settings: "M4 6h16 M4 12h16 M4 18h16 M8 3v6 M16 9v6 M10 15v6",
   motion: "M3 12h4l3-8 4 16 3-8h4",

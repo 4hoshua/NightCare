@@ -1,5 +1,6 @@
 import { useEffect, useId, useRef, useState, type ReactNode } from "react";
-import { api, date, names, type Overview } from "./model";
+import { api, date, names, type Overview, type Device } from "./model";
+import { Icon, type IconName } from "./navigation";
 import { NotificationProvider } from "./notifications";
 export type FleetDeviceProps = {
   deviceId: string;
@@ -216,9 +217,13 @@ export function FleetAlerts({
 }
 function AnimatedBedCard({
   visible,
+  live,
+  assistance,
   children,
 }: {
   visible: boolean;
+  live: boolean;
+  assistance?: string;
   children: ReactNode;
 }) {
   const [present, setPresent] = useState(visible);
@@ -239,11 +244,116 @@ function AnimatedBedCard({
   return (
     <section
       className={`card bed-card ${visible ? "bed-card-enter" : "bed-card-exit"}`}
+      data-live={live}
+      data-assistance={assistance ?? "UNKNOWN"}
       aria-hidden={!visible || undefined}
       inert={!visible}
     >
       {children}
     </section>
+  );
+}
+function BedSignal({
+  label,
+  icon,
+  value,
+  tone,
+  kind,
+}: {
+  label: string;
+  icon: IconName;
+  value: string;
+  tone:
+    | "quiet"
+    | "light"
+    | "motion"
+    | "pending"
+    | "confirmed"
+    | "warning"
+    | "unknown";
+  kind: "motion" | "lighting" | "assistance" | "clock";
+}) {
+  return (
+    <div className={`bed-signal bed-signal-${kind} is-${tone}`}>
+      <dt>
+        <span className="bed-signal-icon">
+          <Icon name={icon} />
+        </span>
+        <span>{label}</span>
+      </dt>
+      <dd className="bed-signal-value" key={value}>
+        {value}
+      </dd>
+    </div>
+  );
+}
+function BedSignals({ state }: { state: Device["state"] }) {
+  const help = state?.assistanceStatus;
+  return (
+    <dl className="bed-signals">
+      <BedSignal
+        label="Movimento"
+        kind="motion"
+        icon={!state ? "unknown" : state.motion ? "motion" : "motion-idle"}
+        tone={!state ? "unknown" : state.motion ? "motion" : "quiet"}
+        value={
+          !state
+            ? "Sem informação"
+            : state.motion
+              ? "Detectado"
+              : "Sem movimento"
+        }
+      />
+      <BedSignal
+        label="Luz"
+        kind="lighting"
+        icon={!state ? "unknown" : state.lightOn ? "light-on" : "light-off"}
+        tone={!state ? "unknown" : state.lightOn ? "light" : "quiet"}
+        value={
+          !state
+            ? "Sem informação"
+            : state.lightOn
+              ? `Acesa · ${state.brightnessPct}%`
+              : "Apagada"
+        }
+      />
+      <BedSignal
+        label="Assistência"
+        kind="assistance"
+        icon={
+          !state
+            ? "unknown"
+            : help === "PENDING"
+              ? "help"
+              : help === "ACKNOWLEDGED"
+                ? "help-check"
+                : "check"
+        }
+        tone={
+          !state
+            ? "unknown"
+            : help === "PENDING"
+              ? "pending"
+              : help === "ACKNOWLEDGED"
+                ? "confirmed"
+                : "quiet"
+        }
+        value={state ? names[state.assistanceStatus] : "Sem informação"}
+      />
+      <BedSignal
+        label="Relógio"
+        kind="clock"
+        icon={!state ? "unknown" : state.clockValid ? "clock-check" : "warning"}
+        tone={!state ? "unknown" : state.clockValid ? "confirmed" : "warning"}
+        value={
+          !state
+            ? "Sem informação"
+            : state.clockValid
+              ? "Sincronizado"
+              : "Inválido ou em teste"
+        }
+      />
+    </dl>
   );
 }
 export function FleetOverview({
@@ -296,59 +406,22 @@ export function FleetOverview({
           <AnimatedBedCard
             key={d.deviceId}
             visible={filtered.some((match) => match.deviceId === d.deviceId)}
+            live={connected && d.online}
+            assistance={d.state?.assistanceStatus}
           >
             <div className="section-title">
               <h2>{d.bed!.name}</h2>
               <span
-                className={`pill ${connected && d.online ? "success" : "waiting"}`}
+                className={`pill bed-presence ${connected && d.online ? "success" : "waiting"}`}
               >
-                {connected && d.online ? "Online" : "Offline"}
+                <Icon
+                  name={connected && d.online ? "connection" : "connection-off"}
+                />
+                {!connected ? "Sem conexão" : d.online ? "Online" : "Offline"}
               </span>
             </div>
             <p className="mono">{d.deviceId}</p>
-            <dl className="detail-list">
-              <div>
-                <dt>Movimento</dt>
-                <dd>
-                  {d.state
-                    ? d.state.motion
-                      ? "Detectado"
-                      : "Sem movimento"
-                    : "Sem informação"}
-                </dd>
-              </div>
-              <div>
-                <dt>Luz</dt>
-                <dd>
-                  {d.state
-                    ? d.state.lightOn
-                      ? `Acesa · ${d.state.brightnessPct}%`
-                      : "Apagada"
-                    : "Sem informação"}
-                </dd>
-              </div>
-              <div>
-                <dt>Assistência</dt>
-                <dd>
-                  {d.state ? names[d.state.assistanceStatus] : "Sem informação"}
-                </dd>
-              </div>
-              <div>
-                <dt>Relógio</dt>
-                <dd>
-                  {d.state
-                    ? d.state.clockValid
-                      ? "Sincronizado"
-                      : "Inválido ou em teste"
-                    : "Sem informação"}
-                </dd>
-              </div>
-            </dl>
-            {(!connected || !d.online) && (
-              <p className="hint">
-                Última informação recebida; sem atualização ao vivo.
-              </p>
-            )}
+            <BedSignals state={d.state} />
             <div className="actions">
               <button onClick={() => onSelect(d.deviceId, "iluminacao")}>
                 Abrir iluminação
